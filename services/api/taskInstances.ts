@@ -24,6 +24,7 @@ export async function createTaskInstance(taskTemplateId: string, date: string) {
   return data;
 }
 
+/* Is onderstaande functie nog nodig? */
 /*
   fetchTaskInstancesBySection:
   - Doel: Haal alle taakinstances op voor een bepaalde sectie (sectionId) en datum.
@@ -75,11 +76,11 @@ export async function updateTaskInstanceStatus(taskInstanceId: string, newStatus
 */
 export async function assignTaskInstance(
   taskInstanceId: string,
-  profileId: string | null
+  profileIds: string[] | null/* Geef een array mee als er meerdere profielen zijn */
 ) {
   const { data, error } = await supabase
     .from("task_instances")
-    .update({ assigned_to: profileId })
+    .update({ assigned_to: profileIds }) /* Update met de array direct */
     .eq("id", taskInstanceId)
     .maybeSingle();
   if (error) throw error;

@@ -14,7 +14,6 @@ import { createTaskInstance } from "./taskInstances";
          c. Als er geen instance bestaat, maak er dan een aan via createTaskInstance en voeg deze toe.
       3. Retourneer de array van task_instances, waarbij we de task_name van de template toevoegen.
   - Deze helper centraliseert de logica zodat je componenten eenvoudiger de dag-specifieke taken kunnen ophalen.
-  - Optioneel: Je zou deze logica ook inline in een useEffect kunnen schrijven, maar het centraliseren in een helper maakt de code DRY en herbruikbaar.
 */
 export async function getTasksForSectionOnDate(sectionId: string, selectedDate: string) {
   /* Haal alle geldige task templates op voor deze sectie en datum */
@@ -29,7 +28,9 @@ export async function getTasksForSectionOnDate(sectionId: string, selectedDate: 
       .select("*")
       .eq("task_template_id", template.id)
       .eq("date", selectedDate)
-      .maybeSingle();
+      .limit(1)
+      .single()
+      // .maybeSingle();
     if (error) throw error;
 
     if (data) {
