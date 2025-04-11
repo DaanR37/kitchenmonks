@@ -29,9 +29,9 @@ export async function getTasksForSectionOnDate(sectionId: string, selectedDate: 
       .eq("task_template_id", template.id)
       .eq("date", selectedDate)
       .limit(1)
-      .single()
-      // .maybeSingle();
+      .maybeSingle();
     if (error) throw error;
+    console.log("data", data);
 
     if (data) {
       /* Als er al een instance bestaat, voeg deze toe, en overschrijf eventueel de task_name uit de template */

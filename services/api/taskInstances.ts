@@ -12,10 +12,10 @@ export async function createTaskInstance(taskTemplateId: string, date: string) {
   const { data, error } = await supabase
     .from("task_instances")
     .insert([
-      { 
-        task_template_id: taskTemplateId, /* Koppeling met de taaktemplate */
-        date: date /* De specifieke datum voor deze instance */
-      }
+      {
+        task_template_id: taskTemplateId /* Koppeling met de taaktemplate */,
+        date: date /* De specifieke datum voor deze instance */,
+      },
     ])
     .select() /* Retourneer de ingevoegde rij (nieuwe taakinstance) */
     .maybeSingle(); /* Verwacht één enkele rij */
@@ -24,7 +24,6 @@ export async function createTaskInstance(taskTemplateId: string, date: string) {
   return data;
 }
 
-/* Is onderstaande functie nog nodig? */
 /*
   fetchTaskInstancesBySection:
   - Doel: Haal alle taakinstances op voor een bepaalde sectie (sectionId) en datum.
@@ -76,13 +75,50 @@ export async function updateTaskInstanceStatus(taskInstanceId: string, newStatus
 */
 export async function assignTaskInstance(
   taskInstanceId: string,
-  profileIds: string[] | null/* Geef een array mee als er meerdere profielen zijn */
+  profileIds: string[] | null /* Geef een array mee als er meerdere profielen zijn */
 ) {
   const { data, error } = await supabase
     .from("task_instances")
     .update({ assigned_to: profileIds }) /* Update met de array direct */
     .eq("id", taskInstanceId)
     .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Zet de taak op "in progress" en vul started_at in met huidige timestamp.
+ */
+export async function updateTaskInstanceInProgress(taskInstanceId: string) {
+  const { data, error } = await supabase
+    .from("task_instances")
+    .update({
+      status: "in progress",
+      started_at: new Date().toISOString(),
+      // Probeer te voorkomen dat finished_at hier per ongeluk
+      // gevuld wordt, dus die laten we weg of nullen we juist
+      // if you want to reset it: finished_at: null,
+    })
+    .eq("id", taskInstanceId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Zet de taak op "done" en vul finished_at in met huidige timestamp.
+ */
+export async function updateTaskInstanceDone(taskInstanceId: string) {
+  const { data, error } = await supabase
+    .from("task_instances")
+    .update({
+      status: "done",
+      finished_at: new Date().toISOString(),
+    })
+    .eq("id", taskInstanceId)
+    .maybeSingle();
+
   if (error) throw error;
   return data;
 }

@@ -1,81 +1,48 @@
-import React, { useContext, useEffect, useState } from "react";
+import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
-import { AuthContext } from "@/services/AuthContext";
-import { ProfileContext } from "@/services/ProfileContext";
-import { DateContext } from "@/services/DateContext";
-import { supabase } from "@/services/supabaseClient";
-import {
-  fetchMyTasksCount,
-  // fetchAllTasksPercentage,
-  // fetchInactiveTasksCount,
-} from "@/services/api/taskStats";
 
-export default function StatsSection() {
+type StatsSectionProps = {
+  allPercentage: number;
+  outOfStockCount: number;
+  myTasksCount: number;
+  inactiveTasksCount: number;
+};
+
+export default function StatsSection({
+  allPercentage,
+  outOfStockCount,
+  myTasksCount,
+  inactiveTasksCount,
+}: StatsSectionProps) {
   const router = useRouter();
-  const { user } = useContext(AuthContext);
-  const { activeProfile } = useContext(ProfileContext);
-  const [myTasksCount, setMyTasksCount] = useState(0);
-  const [allPercentage, setAllPercentage] = useState(0);
-  const [inactiveCount, setInactiveCount] = useState(0);
-
-  /* Laad de statistieken */
-  async function loadStats() {
-    if (!user || !activeProfile) return;
-    try {
-      const myCount = await fetchMyTasksCount(activeProfile.id);
-      setMyTasksCount(myCount);
-      // const allStat = await fetchAllTasksPercentage(user.user_metadata.kitchen_id);
-      // const inactive = await fetchInactiveTasksCount(user.user_metadata.kitchen_id);
-      // setAllPercentage(allStat);
-      // setInactiveCount(inactive);
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    }
-  }
-
-  /* Real-time subscription: luister naar veranderingen in de task_instances tabel */
-  useEffect(() => {
-    if (!user || !activeProfile) return;
-
-    /* Maak een channel aan voor realtime updates op de "task_instances" tabel */
-    const channel = supabase
-      .channel("taskInstancesChannel")
-      .on(
-        "postgres_changes" /* Luister naar alle postgres veranderingen */,
-        {
-          event: "*", // Alle events (INSERT, UPDATE, DELETE)
-          schema: "public",
-          table: "task_instances", // De tabel waarop je wilt abonneren
-        },
-        (payload: any) => {
-          /* Dit is je callback wanneer er een verandering plaatsvindt */
-          console.log("Realtime update:", payload);
-          /* Roep loadStats functie aan zodat statistieken direct worden bijgewerkt */
-          loadStats();
-        }
-      )
-      .subscribe();
-
-    /* Cleanup: zorg dat de channel wordt opgeruimd bij unmount */
-    return () => {
-      channel.unsubscribe();
-    };
-  }, [user, activeProfile]);
 
   return (
     <View style={styles.statsContainer}>
-      {/* Statistiek: All */}
-      <View style={styles.allContainer}>
-        <View style={styles.statLeft}>
-          <View style={[styles.circle, { backgroundColor: "#0066ff" }]} />
-          <Text style={styles.allTitle}>All</Text>
-        </View>
-        <Text style={styles.allPercentage}>49%</Text>
-        {/* <Text style={styles.allPercentage}>{allPercentage}%</Text> */}
+      {/* Rij 1, met "All" (links) en "Out of stock" (rechts) */}
+      <View style={styles.statsRow}>
+        {/* All */}
+        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/allTasks")}>
+          <View style={styles.statLeft}>
+            <View style={[styles.circle, { backgroundColor: "#0066ff" }]} />
+            <Text style={styles.statLabel}>All</Text>
+          </View>
+          {/* Toon percentage voltooide taken */}
+          <Text style={styles.statValue}>{allPercentage}%</Text>
+        </TouchableOpacity>
+
+        {/* Out of stock */}
+        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/outOfStock")}>
+          <View style={styles.statLeft}>
+            <View style={[styles.circle, { backgroundColor: "#FF6347" }]} />
+            <Text style={styles.statLabel}>Out of stock</Text>
+          </View>
+          {/* Toon aantal out of stock taken */}
+          <Text style={styles.statValue}>{outOfStockCount}</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Statistieken: My tasks en Inactive */}
+      {/* Rij 2, met "My tasks" (links) en "Inactive" (rechts) */}
       <View style={styles.statsRow}>
         {/* My tasks */}
         <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/myTasks")}>
@@ -92,7 +59,7 @@ export default function StatsSection() {
             <View style={[styles.circle, { backgroundColor: "#00bb06" }]} />
             <Text style={styles.statLabel}>Inactive</Text>
           </View>
-          <Text style={styles.statValue}>{inactiveCount}</Text>
+          <Text style={styles.statValue}>{inactiveTasksCount}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -103,15 +70,28 @@ const styles = StyleSheet.create({
   statsContainer: {
     marginVertical: 16,
   },
-  allContainer: {
+  // Een rij met twee boxen naast elkaar
+  statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    width: "100%",
+    marginBottom: 12, // beetje extra ruimte tussen rijen
+  },
+  // Standaard-’box’ voor de statistiek, halve breedte
+  statBox: {
+    width: "48%",
+    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
-    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    // Optioneel: schaduw, elevation etc.
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
+  // De linkerhelft van statBox, met een kleine circle en een titel
   statLeft: {
     flexDirection: "column",
   },
@@ -121,34 +101,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 6,
   },
-  allTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  allPercentage: {
-    fontSize: 26,
-    fontWeight: "700",
-  },
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  statBox: {
-    width: "48%",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
   statLabel: {
     fontSize: 16,
     fontWeight: "500",
     marginBottom: 4,
+    color: "#333",
   },
+  // De (hoofd)waarde die aan de rechterkant wordt weergegeven
   statValue: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "700",
+    color: "#333",
+    alignSelf: "center",
   },
 });

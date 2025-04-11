@@ -5,7 +5,7 @@ import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileContext } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers"; /* Haal de dag-specifieke taken voor een sectie op, door de logica in taskHelpers te gebruiken */
+import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import {
   updateTaskInstanceInProgress,
   updateTaskInstanceDone,
@@ -19,11 +19,9 @@ export type TaskRow = {
   task_name: string;
   status: string;
   date: string;
-  /* Voor toewijzing gebruiken we een array met profile IDs */
   assigned_to?: string[];
   task_template_id: string;
   section_id: string;
-  /* Deze property wordt toegevoegd zodat we later de parent sectie informatie in de modal kunnen tonen */
   section: {
     id: string;
     section_name: string;
@@ -44,16 +42,12 @@ export type ProfileData = {
   id: string;
   first_name: string;
   last_name: string;
-  // Eventueel extra velden zoals thumbnail_color etc.
-  // profile_name: string;
-  // kitchen_id: string;
 };
 
-export default function MyTasksScreen() {
+export default function AllTasksScreen() {
   const router = useRouter();
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
-  const { activeProfile } = useContext(ProfileContext);
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -76,37 +70,33 @@ export default function MyTasksScreen() {
     loadProfiles();
   }, [user]);
 
-  /* Laad de secties en per sectie de taakinstances voor de geselecteerde datum */
   useEffect(() => {
     loadData();
   }, [selectedDate]);
 
-  /* loadData:
-  - Haal alle secties op voor de keuken
-  - Voor elke sectie: haal de taken op voor de geselecteerde datum
-  - Filter de taken: toon alleen taken waarvoor de actieve profiel-ID voorkomt in de assigned_to array
-  - Voeg de parent sectie-gegevens toe aan elke taak zodat deze beschikbaar zijn voor de modal
-  */
+  /* Data Fetch: Alle taken uit de hele keuken met status in progress of done */
   async function loadData() {
-    if (!user || !activeProfile) return;
+    if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
 
     setLoading(true);
     try {
-      // 1) Haal alle secties op voor de keuken (datumfilter niet toepassen, want secties vormen de vaste menukaart)
+      // 1) Haal alle secties op (zonder datumfilter).
       const secs = await fetchSections(kitchenId);
 
-      // 2) Voor elke sectie: haal de taken op voor de geselecteerde datum en voeg de section-data toe
+      // 2) Voor elke sectie: haal ALLE taken (instances) op voor de selectedDate.
+      //    Filter ze daarna zodanig dat alleen tasks met "in progress" of "done" overblijven.
       const merged: SectionData[] = await Promise.all(
         secs.map(async (sec: any) => {
-          // Haal de taken op voor de sectie via de helper functie
           const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
-          // Filter de taken: toon alleen taken waarvoor de actieve profiel-ID voorkomt in de assigned_to array
-          const filteredTasks = allTasks.filter((task: TaskRow) => {
-            return task.assigned_to?.includes(activeProfile.id);
-          });
-          // Voeg de parent sectie-gegevens toe aan elke taak zodat deze beschikbaar zijn voor de modal
+
+          // Filter: we laten alleen taken zien die "in progress" of "done" zijn.
+          const filteredTasks = allTasks.filter(
+            (task: TaskRow) => task.status === "in progress" || task.status === "done"
+          );
+
+          // Voeg de sectie-data toe aan elk task-object.
           const tasksWithSection = filteredTasks.map((t: any) => ({
             ...t,
             section: {
@@ -116,6 +106,7 @@ export default function MyTasksScreen() {
               end_date: sec.end_date,
             },
           }));
+
           return {
             id: sec.id,
             section_name: sec.section_name,
@@ -125,29 +116,15 @@ export default function MyTasksScreen() {
           };
         })
       );
-      // Optioneel: Filter secties waar geen enkele taak is toegewezen aan activeProfile
-      const sectionsWithTasks = merged.filter((sec) => sec.tasks.length > 0);
+
+      // Filter secties zonder taken (optioneel)
+      const sectionsWithTasks = merged.filter((s) => s.tasks.length > 0);
       setSections(sectionsWithTasks);
     } catch (error) {
-      console.log("Error loading my tasks:", error);
+      console.log("Error loading all tasks (in progress/done):", error);
     } finally {
       setLoading(false);
     }
-  }
-  /* Wijzig de status van een taak naar "active" */
-  async function handleSetActiveTask() {
-    if (!selectedTask) return;
-    await updateTaskInstanceStatus(selectedTask.id, "active");
-    // Werk de lokale state bij zodat de UI direct de gewijzigde status toont
-    const updatedSections = sections.map((sec) => {
-      if (sec.id !== selectedTask.section.id) return sec;
-      return {
-        ...sec,
-        tasks: sec.tasks.map((t) => (t.id === selectedTask.id ? { ...t, status: "active" } : t)),
-      };
-    });
-    setSections(updatedSections);
-    closeTaskDetailsModal();
   }
   /* Handle the toggle of task assignments */
   async function handleToggleAssignTask(profileId: string) {
@@ -187,7 +164,6 @@ export default function MyTasksScreen() {
       console.log("Error updating assignment/status:", error);
     }
   }
-
   /* Zet de taak op "in progress" */
   async function handleSetInProgress() {
     if (!selectedTask) return;
@@ -228,7 +204,6 @@ export default function MyTasksScreen() {
       console.log("Error setting done:", error);
     }
   }
-
   /* Open de details modal voor een taak */
   function openTaskDetailsModal(task: TaskRow) {
     setSelectedTask(task);
@@ -260,14 +235,14 @@ export default function MyTasksScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header met een terugknop bijvoorbeeld */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>{"<"} My Tasks</Text>
+          <Text style={styles.backText}>{"<"} All tasks</Text>
         </TouchableOpacity>
       </View>
 
-      {/* FlatList met secties en hun taken (gefilterd op activeProfile) */}
+      {/* FlatList met secties en taken (gefilterd op done/in progress) */}
       <FlatList
         data={sections}
         keyExtractor={(sec) => sec.id}
@@ -280,7 +255,7 @@ export default function MyTasksScreen() {
                 style={styles.taskItem}
                 onPress={() => openTaskDetailsModal(task)}
               >
-                <Text style={{ color: task.status === "active" ? "#000" : "#666" }}>
+                <Text style={{ color: task.status === "done" ? "#000" : "#666" }}>
                   {cleanTaskName(task.task_name)}
                 </Text>
               </TouchableOpacity>

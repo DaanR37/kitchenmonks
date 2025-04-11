@@ -13,20 +13,21 @@ import {
   Platform,
   FlatList,
 } from "react-native";
-
-/* Import de contexten waarin de ingelogde user, profile en geselecteerde datum staan */
 import { AuthContext } from "@/services/AuthContext";
 import { ProfileContext } from "@/services/ProfileContext";
 import { DateContext } from "@/services/DateContext";
-
-/* Import je API-functies voor secties */
 import { fetchSections, createSection } from "@/services/api/sections";
-
 import DateSelector from "@/components/DateSelector";
 import SearchBar from "@/components/SearchBar";
 import StatsSection from "@/components/StatsSection";
 import SectionItems, { SectionData } from "@/components/SectionItems";
-import { logoutUser } from "@/services/api/logout";
+import {
+  fetchMyTasksCount,
+  fetchInactiveTasksCount,
+  fetchAllDonePercentage,
+  fetchActiveCountPerSection,
+} from "@/services/api/taskStats";
+import { supabase } from "@/services/supabaseClient";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -40,6 +41,11 @@ export default function HomeScreen() {
   const [newSectionName, setNewSectionName] = useState("");
   const [newSectionStartDate, setNewSectionStartDate] = useState<string>(selectedDate);
   const [newSectionEndDate, setNewSectionEndDate] = useState<string>(selectedDate);
+  const [myTasksCount, setMyTasksCount] = useState(0);
+  const [inactiveTasksCount, setInactiveTasksCount] = useState(0);
+  const [allPercentage, setAllPercentage] = useState(0);
+  const [outOfStockCount, setOutOfStockCount] = useState(0);
+  const [activeTasksCountPerSection, setActiveTasksCountPerSection] = useState<Record<string, number>>({});
 
   /* Check of de user ingelogd is - anders redirect naar auth/login */
   useEffect(() => {
@@ -55,9 +61,77 @@ export default function HomeScreen() {
       const kitchenId = user.user_metadata?.kitchen_id;
       if (kitchenId) {
         loadSections(kitchenId);
+        updateActiveTasksCount();
       }
     }
   }, [user, selectedDate]);
+
+  /* Update beide tellers bij initial load en datum wisseling */
+  useEffect(() => {
+    updateMyTasksCount();
+    updateInactiveTasksCount();
+    updateActiveTasksCount();
+    updateAllPercentage();
+  }, [activeProfile, selectedDate]);
+
+  /* Real-time subscription instellen voor task_instances tabel */
+  useEffect(() => {
+    if (!user || !activeProfile || !selectedDate) return;
+
+    const channel = supabase
+      .channel("taskInstancesChannel")
+      .on(
+        "postgres_changes",
+        {
+          event: "*", // luister naar INSERT, UPDATE, DELETE
+          schema: "public",
+          table: "task_instances",
+        },
+        (payload: any) => {
+          console.log("Realtime update (task_instances):", payload);
+          updateMyTasksCount();
+          updateInactiveTasksCount();
+          updateAllPercentage();
+          updateActiveTasksCount();
+        }
+      )
+      .subscribe();
+
+    /* Cleanup bij unmount */
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [user, activeProfile, selectedDate]);
+
+  /* Haal het percentage “done” op van alle taken in de hele keuken (ongeacht assigned_to) */
+  async function updateAllPercentage() {
+    const percentage = await fetchAllDonePercentage(selectedDate);
+    setAllPercentage(percentage);
+  }
+  /* Haal "My tasks" count op en update deze state */
+  async function updateMyTasksCount() {
+    if (activeProfile) {
+      const count = await fetchMyTasksCount(activeProfile.id, selectedDate);
+      setMyTasksCount(count);
+    }
+  }
+  /* Haal "Inactive tasks" count op en update deze state */
+  async function updateInactiveTasksCount() {
+    const count = await fetchInactiveTasksCount(selectedDate);
+    setInactiveTasksCount(count);
+  }
+  /* Haal "Active tasks" count op en update deze state */
+  async function updateActiveTasksCount() {
+    if (activeProfile && selectedDate && user) {
+      const kitchenId = user.user_metadata?.kitchen_id;
+      if (kitchenId) {
+        const activeCounts = await fetchActiveCountPerSection(kitchenId, selectedDate);
+        setActiveTasksCountPerSection(activeCounts);
+      }
+    }
+  }
+
+  /* --- Functies voor secties & logout --- */
 
   /* Functie: Laadt alle secties voor de gegeven kitchen_id
   Opmerking: je kunt hier eventueel de datum als filter meegeven als je secties datumgebonden wilt maken,
@@ -65,25 +139,24 @@ export default function HomeScreen() {
   async function loadSections(kitchenId: string /* date: string */) {
     setLoadingSections(true);
     try {
-      /* fetchSections haalt de secties op. We geven hier alleen kitchenId mee,
-      omdat de filtering op datum gebeurt in de query in Supabase (als je dat wilt inschakelen) */
+      /* We geven hier alleen kitchenId mee, omdat de filtering op datum gebeurt 
+      in de query in Supabase (als je dat wilt inschakelen) */
       const data = await fetchSections(kitchenId /* date */);
-      /* Map de data naar jouw SectionData type */
       const mappedSections: SectionData[] = data.map((section: any) => ({
         id: section.id,
-        /* Gebruik section_name of fallback naar section.name */
         section_name: section.section_name ?? section.name,
+        start_date: section.start_date,
+        end_date: section.end_date,
         task_templates: section.task_templates || [],
       }));
       setSections(mappedSections);
-      console.log("Sections loaded:", mappedSections);
+      // console.log("Sections loaded:", mappedSections);
     } catch (error: any) {
       console.error("Error loading sections:", error.message);
     } finally {
       setLoadingSections(false);
     }
   }
-
   /* Creëer een nieuwe sectie met de ingevoerde naam en de start- en einddatum */
   async function handleCreateSection() {
     if (!user) return;
@@ -101,6 +174,8 @@ export default function HomeScreen() {
       const newSectionObj: SectionData = {
         id: newSection.id,
         section_name: newSection.section_name ?? newSection.name,
+        start_date: newSection.start_date,
+        end_date: newSection.end_date,
         task_templates: [] /* Geen taken bij aanmaak */,
       };
       /* Voeg de nieuwe sectie toe aan de bestaande lijst */
@@ -119,19 +194,10 @@ export default function HomeScreen() {
   function handleDateChange(newDate: string) {
     setSelectedDate(newDate);
   }
-
   /* Functie: Druk op een sectie in de lijst */
   function handlePressSection(sectionId: string) {
     /* Hier een navigatie naar een sectiedetailpagina, bijvoorbeeld: router.push(`/sections/${sectionId}`) */
     console.log("Pressed section:", sectionId);
-  }
-
-  /* Roep logoutUser aan, reset context en navigeer terug naar /auth */
-  async function handleLogout() {
-    setMenuVisible(false);
-    await logoutUser();
-    setActiveProfile(null);
-    router.replace("/auth");
   }
 
   /* Genereer initialen van het actieve profiel, als dit beschikbaar is */
@@ -140,7 +206,6 @@ export default function HomeScreen() {
     const lastInitial = lastName ? lastName.charAt(0).toUpperCase() : "";
     return `${firstInitial}${lastInitial}`;
   }
-
   function getColorFromId(id: string): string {
     const colorPalette = ["#3300ff", "#ff6200", "#00931d", "#d02350"];
     let hash = 0;
@@ -176,7 +241,7 @@ export default function HomeScreen() {
           <Image source={require("../assets/images/kitchenmonks-logo.png")} style={styles.logo} />
           <DateSelector selectedDate={selectedDate} onDateChange={handleDateChange} />
 
-          <TouchableOpacity onPress={() => setMenuVisible(true)}>
+          <TouchableOpacity onPress={() => router.push("/profile/menu")}>
             {activeProfile ? (
               <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
                 <Text style={styles.avatarText}>{initials}</Text>
@@ -189,32 +254,17 @@ export default function HomeScreen() {
 
         {/* Zoekbalk & Datum / Statistieken */}
         <SearchBar />
-        <StatsSection />
-        <SectionItems sections={sections} onPressSection={handlePressSection} />
-
-        {/* Menu-modal voor logout */}
-        <Modal
-          visible={menuVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setMenuVisible(false)}
-        >
-          <TouchableOpacity
-            onPressOut={() => setMenuVisible(false)}
-            activeOpacity={1}
-            style={styles.modalOverlay}
-          >
-            <View style={styles.menuContainer}>
-              <TouchableOpacity onPress={handleLogout} style={styles.menuItem}>
-                <Text style={styles.menuText}>Uitloggen</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.menuItem} onPress={() => setMenuVisible(false)}>
-                <Text style={styles.menuText}>Annuleren</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Modal>
+        <StatsSection
+          myTasksCount={myTasksCount}
+          inactiveTasksCount={inactiveTasksCount}
+          allPercentage={allPercentage}
+          outOfStockCount={outOfStockCount}
+        />
+        <SectionItems
+          sections={sections}
+          onPressSection={handlePressSection}
+          activeTasksCountPerSection={activeTasksCountPerSection}
+        />
 
         {/* Formulier om een nieuwe sectie toe te voegen */}
         <View style={styles.addFormContainer}>

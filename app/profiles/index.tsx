@@ -12,13 +12,14 @@ import {
   // ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { createProfile, fetchProfiles } from "@/services/api/profiles";
 import { ProfileContext, ProfileData } from "@/services/ProfileContext";
 import { supabase } from "@/services/supabaseClient";
 
 export default function ChooseProfileScreen() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{ force?: string }>(); /* voor toegang tot de query parameters */
   const { activeProfile, setActiveProfile } = useContext(ProfileContext);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,12 +29,13 @@ export default function ChooseProfileScreen() {
   const [lastName, setLastName] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [kitchenId, setKitchenId] = useState<string | null>(null);
-
+  
   useEffect(() => {
-    if (activeProfile) {
+    // Als er al een actief profiel is en de query parameter 'force' niet is meegegeven, redirigeer dan naar de HomeScreen.
+    if (activeProfile && !searchParams.force) {
       router.replace("/");
     }
-  }, [activeProfile]);
+  }, [activeProfile, searchParams]);
 
   /* Haal de user op en daarmee de kitchen_id */
   useEffect(() => {
@@ -140,7 +142,7 @@ export default function ChooseProfileScreen() {
       keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
       <View style={styles.mainContainer}>
-        {/* Header met chevron en tekst “Kies je profiel” */}
+        {/* Header met chevron en tekst "Kies je profiel" */}
         <View style={styles.headerRow}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.replace("/auth")}>
             <Ionicons name="chevron-back" size={20} color="#666" />
