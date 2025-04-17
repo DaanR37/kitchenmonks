@@ -7,18 +7,20 @@ import {
   Modal,
   FlatList,
   TextInput,
-  ScrollView,
   Pressable,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
+import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers"; /* Haal de dag-specifieke taken voor een sectie op, door de logica in taskHelpers te gebruiken */
 import {
   updateTaskInstanceStatus,
   assignTaskInstance,
   createTaskInstance,
+  updateTaskInstanceInProgress,
+  updateTaskInstanceDone,
 } from "@/services/api/taskInstances";
 import { createTaskTemplate } from "@/services/api/taskTemplates";
 import { fetchProfiles } from "@/services/api/profiles";
@@ -45,7 +47,6 @@ export type TaskRow = {
     end_date?: string;
   };
 };
-
 /* 
   Type definitie voor een sectie 
   - Elke sectie bevat een naam en een lijst van taakinstances (TaskRow)
@@ -58,16 +59,23 @@ export type SectionData = {
   tasks: TaskRow[];
 };
 
-export type ProfileData = {
-  id: string;
-  first_name: string;
-  last_name: string;
-  // Eventueel extra velden zoals thumbnail_color etc.
-  // profile_name: string;
-  // kitchen_id: string;
+export type StatusMeta = {
+  backgroundColor: string;
+  borderColor?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
 };
 
-export default function InactiveScreen() {
+const STATUS_META: Record<string, StatusMeta> = {
+  done: { backgroundColor: "#00AA00", icon: "checkmark", iconColor: "#fff" },
+  "in progress": { backgroundColor: "#0066ff", icon: "refresh", iconColor: "#fff" },
+  active: { backgroundColor: "transparent", borderColor: "#999" /* geen icon */ },
+  inactive: { backgroundColor: "transparent", borderColor: "#ccc" /* geen icon */ },
+  "out of stock": { backgroundColor: "#ff6347", icon: "alert", iconColor: "#fff" },
+  edit: { backgroundColor: "#000", icon: "create" },
+};
+
+export default function TeamMepScreen() {
   const router = useRouter();
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
@@ -101,10 +109,6 @@ export default function InactiveScreen() {
     loadData();
   }, [selectedDate]);
 
-  /// ------------------------------- ///
-  /// --- Handlers voor de data --- ///
-  /// ------------------------------- ///
-
   /*
     loadData:
     1. Controleer of de user en kitchen_id beschikbaar zijn.
@@ -125,30 +129,52 @@ export default function InactiveScreen() {
       const merged: SectionData[] = await Promise.all(
         secs.map(async (sec: any) => {
           /* Haal de taken op voor deze sectie voor de geselecteerde datum. */
-          const tasks = await getTasksForSectionOnDate(sec.id, selectedDate);
+          const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
 
           /* Voor elke taak voegen we handmatig de sectiegegevens toe, zodat later de modal hierop kan vertrouwen */
-          const tasksWithSection = tasks.map((t: any) => ({
-            ...t,
-            section: {
-              id: sec.id,
-              section_name: sec.section_name,
-              start_date: sec.start_date,
-              end_date: sec.end_date,
-            },
-          }));
+          // const tasksWithSection = tasks.map((t: any) => ({
+          //   ...t,
+          //   section: {
+          //     id: sec.id,
+          //     section_name: sec.section_name,
+          //     start_date: sec.start_date,
+          //     end_date: sec.end_date,
+          //   },
+          // }));
 
           /* Geef de sectie terug met alle relevante informatie, inclusief start en eind datum */
+          // return {
+          //   id: sec.id,
+          //   section_name: sec.section_name,
+          //   start_date: sec.start_date, //Parent start datum
+          //   end_date: sec.end_date, //Parent eind datum
+          //   tasks: tasksWithSection,
+          // };
+
+          const tasks = allTasks
+            .filter((t) => t.status === "active" || t.status === "in progress" || t.status === "done")
+            .map((t: any) => ({
+              ...t,
+              section: {
+                id: sec.id,
+                section_name: sec.section_name,
+                start_date: sec.start_date,
+                end_date: sec.end_date,
+              },
+            }));
+
           return {
             id: sec.id,
             section_name: sec.section_name,
-            start_date: sec.start_date, //Parent start datum
-            end_date: sec.end_date, //Parent eind datum
-            tasks: tasksWithSection,
-          };
+            start_date: sec.start_date,
+            end_date: sec.end_date,
+            tasks,
+          } as SectionData;
         })
       );
-      setSections(merged);
+      // setSections(merged);
+      /* drop lege secties */
+      setSections(merged.filter((s) => s.tasks.length > 0));
     } catch (error) {
       console.log("Error loading inactive tasks:", error);
     } finally {
@@ -220,11 +246,42 @@ export default function InactiveScreen() {
       closeAddTaskModal();
     }
   }
-  /*
-    handleSetActiveTask:
-    - Wijzigt de status van de geselecteerde taak instance naar "active".
-    - Update de lokale state zodat de UI direct de nieuwe status weergeeft.
-  */
+
+  /* 3) Handlers voor in‑progress / done / assign / etc. (zelfde als voor MyTasks) */
+  async function handleToggleAssignTask(profileId: string) {
+    if (!selectedTask) return;
+    const current = selectedTask.assigned_to ?? [];
+    const next = current.includes(profileId)
+      ? current.filter((id) => id !== profileId)
+      : [...current, profileId];
+    const newStatus = next.length > 0 ? "active" : "inactive";
+
+    try {
+      await assignTaskInstance(selectedTask.id, next);
+      await updateTaskInstanceStatus(selectedTask.id, newStatus);
+      refreshSingleStatus(newStatus, next);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  async function handleSetDone() {
+    if (!selectedTask) return;
+    try {
+      await updateTaskInstanceDone(selectedTask.id);
+      refreshSingleStatus("done");
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  async function handleSetInProgress() {
+    if (!selectedTask) return;
+    try {
+      await updateTaskInstanceInProgress(selectedTask.id);
+      refreshSingleStatus("in progress");
+    } catch (e) {
+      console.error(e);
+    }
+  }
   async function handleSetActiveTask() {
     if (!selectedTask) return;
     await updateTaskInstanceStatus(selectedTask.id, "active");
@@ -239,8 +296,6 @@ export default function InactiveScreen() {
     setSections(updatedSections);
     closeTaskDetailsModal();
   }
-
-  /* ---- Hier komt een functie om de taak inactive te maken ---- */
   async function handleSetInactiveTask() {
     if (!selectedTask) return;
     try {
@@ -263,63 +318,33 @@ export default function InactiveScreen() {
       console.log("Error setting inactive:", error);
     }
   }
-  /* handleToggleAssignTask:
-    Hiermee kun je een taak toewijzen aan (of loskoppelen van) een profiel.
-    - Als het profiel al is toegewezen, verwijderen we het.
-    - Anders voegen we het profiel toe.
-    We werken met een array voor "assigned_to", maar in de database slaan we het tijdelijk als een komma-gescheiden string op. */
-  async function handleToggleAssignTask(profileId: string) {
+  async function handleSetOutOfStock() {
     if (!selectedTask) return;
-    if (!selectedTask.section) {
-      console.log("Selected task mist section data.");
-      return;
-    }
-
-    /* Kopieer de huidige toewijzingen (als array). Als er niets is, start met een lege array */
-    let currentAssignments: string[] = selectedTask.assigned_to ? [...selectedTask.assigned_to] : [];
-    /* Controleer of het profiel al is toegewezen */
-    const isAssigned = currentAssignments.includes(profileId);
-
-    /* Als het profiel al is toegewezen, verwijder het; anders voeg het toe */
-    if (isAssigned) {
-      currentAssignments = currentAssignments.filter((id) => id !== profileId);
-    } else {
-      currentAssignments.push(profileId);
-    }
-    /* Bepaal nieuwe status: als er een of meer profielen toegewezen zijn, dan 'active', anders 'inactive' */
-    const newStatus = currentAssignments.length > 0 ? "active" : "inactive";
     try {
-      /* Update in de database: werk zowel de toewijzing als de status bij */
-      await assignTaskInstance(selectedTask.id, currentAssignments);
-      await updateTaskInstanceStatus(selectedTask.id, newStatus);
-
-      /* Update lokale state van de secties: zoek de sectie en update daar de taak */
-      const updatedSections = sections.map((sec) => {
-        /* Controleer of de sectie van de taak bekend is - extra check */
-        if (!selectedTask || !selectedTask.section) return sec;
-
-        /* Als de sectie-id niet overeenkomt, laat die sectie ongewijzigd */
-        if (sec.id !== selectedTask.section.id) return sec;
-
-        /* Indien wel, update dan de betreffende taak */
-        return {
-          ...sec,
-          tasks: sec.tasks.map((t) =>
-            t.id === selectedTask.id ? { ...t, assigned_to: currentAssignments, status: newStatus } : t
-          ),
-        };
-      });
-      setSections(updatedSections);
-      /* Belangrijk: Update ook de lokale state van selectedTask, zodat deze de nieuwe toewijzingen en status bevat */
-      setSelectedTask({ ...selectedTask, assigned_to: currentAssignments, status: newStatus });
+      await updateTaskInstanceStatus(selectedTask.id, "out of stock");
+      refreshSingleStatus("out of stock");
     } catch (error) {
-      console.log("Error updating assignment/status:", error);
+      console.log("Error setting out of stock:", error);
     }
   }
 
-  /// ------------------------------- ///
-  /// --- Handlers voor de modals --- ///
-  /// ------------------------------- ///
+  /* helper om één taak in state bij te werken */
+  function refreshSingleStatus(status: string, assigned_to: string[] = selectedTask?.assigned_to ?? []) {
+    if (!selectedTask) return;
+    const updated = { ...selectedTask, status, assigned_to };
+    setSelectedTask(updated);
+
+    setSections((secs) =>
+      secs.map((sec) =>
+        sec.id !== updated.section.id
+          ? sec
+          : {
+              ...sec,
+              tasks: sec.tasks.map((t) => (t.id === updated.id ? updated : t)),
+            }
+      )
+    );
+  }
 
   /* Handlers voor de "Nieuwe taak" modal */
   function openAddTaskModal(sectionId: string) {
@@ -355,6 +380,12 @@ export default function InactiveScreen() {
     }
     return fullName;
   }
+
+  function generateInitials(firstName?: string, lastName?: string): string {
+    const firstInitial = firstName ? firstName.charAt(0).toUpperCase() : "";
+    const lastInitial = lastName ? lastName.charAt(0).toUpperCase() : "";
+    return `${firstInitial}${lastInitial}`;
+  }
   function getColorFromId(id: string): string {
     const colorPalette = ["#3300ff", "#ff6200", "#00931d", "#d02350", "#6C63FF", "#FC3D21"];
     let hash = 0;
@@ -364,6 +395,26 @@ export default function InactiveScreen() {
     const index = Math.abs(hash) % colorPalette.length;
     return colorPalette[index];
   }
+
+  /* Handle the circle press */
+  const handleCirclePress = async (task: TaskRow) => {
+    // 1) Update DB
+    await updateTaskInstanceDone(task.id);
+    // 2) Lokale state bijwerken
+    setSections((prev) =>
+      prev.map((sec) => {
+        if (sec.id !== task.section.id) return sec;
+        return {
+          ...sec,
+          tasks: sec.tasks.map((t) => (t.id === task.id ? { ...t, status: "done" } : t)),
+        };
+      })
+    );
+
+    // 3) Modal openen
+    setSelectedTask({ ...task, status: "done" });
+    setShowDetailsModal(true);
+  };
 
   /* horizontale slider styling */
   const renderProfileBubbles = () => {
@@ -393,36 +444,11 @@ export default function InactiveScreen() {
           );
         }}
       />
-      // <ScrollView
-      //   horizontal
-      //   showsHorizontalScrollIndicator={false}
-      //   contentContainerStyle={styles.profileBubblesContainer}
-      // >
-      //   {allProfiles.map((profile) => {
-      //     const isAssigned = selectedTask.assigned_to?.includes(profile.id);
-      //     const bgColor = getColorFromId(profile.id); // Bepaal de kleur
-      //     // Bepaal initialen, mocht je dat doen via generateInitials()
-      //     const initials = (profile.first_name?.charAt(0) ?? "") + (profile.last_name?.charAt(0) ?? "");
-      //     return (
-      //       <TouchableOpacity
-      //         key={profile.id}
-      //         style={[
-      //           styles.profileBubble,
-      //           { backgroundColor: bgColor }, // Basiskleur
-      //           isAssigned && styles.profileBubbleSelected,
-      //         ]}
-      //         onPress={() => handleToggleAssignTask(profile.id)}
-      //       >
-      //         <Text style={styles.profileBubbleText}>{initials.toUpperCase()}</Text>
-      //       </TouchableOpacity>
-      //     );
-      //   })}
-      // </ScrollView>
     );
   };
 
   /* De rest van de modal: */
-  const renderTaskModal = () => {
+  const renderTeamMepModal = () => {
     if (!selectedTask) return null;
     return (
       <Modal
@@ -435,31 +461,28 @@ export default function InactiveScreen() {
           <Pressable style={styles.bottomModalContainer} onPress={(e) => e.stopPropagation()}>
             {/* Taaknaam */}
             <Text style={styles.modalTaskTitle}>{cleanTaskName(selectedTask.task_name)}</Text>
-            {/* “Assign to” label */}
-            {/* Wellicht zonder assignContainer !!!!! */}
-            {/* <View style={styles.assignContainer}> */}
-              <Text style={styles.assignTitle}>Assign to:</Text>
-            {/* </View> */}
+            <Text style={styles.assignTitle}>Assign to:</Text>
+
             {/* Horizontale slider met profielen */}
             {renderProfileBubbles()}
 
-
-
-            {/* Status-keuzes in 2x2 layout, etc. */}
+            {/* Status-keuzes in 3x3 layout, etc. */}
             <View style={styles.statusGridContainer}>
               <Text style={styles.statusGridTitle}>Status</Text>
-              {/* Rij 1: Active / Inactive */}
+
+              {/* Rij 1: Done / In progress */}
               <View style={styles.statusGridRow}>
+                {/* Done */}
                 <TouchableOpacity
-                  style={[styles.statusOval, selectedTask.status === "active" && styles.statusOvalSelected]}
-                  onPress={handleSetActiveTask}
+                  style={[styles.statusOval, selectedTask.status === "done" && styles.statusOvalSelected]}
+                  onPress={handleSetDone}
                 >
                   {/* Cirkeltje links, evt. met icon */}
                   <View
                     style={[
                       styles.statusOvalCircle,
                       { backgroundColor: "#00AA00" }, // groen voor active
-                      selectedTask.status !== "active" && { opacity: 0.5 },
+                      selectedTask.status !== "done" && { opacity: 0.5 },
                     ]}
                   >
                     {/* Eventueel een icoon */}
@@ -470,80 +493,53 @@ export default function InactiveScreen() {
                   <Text
                     style={[
                       styles.statusOvalLabel,
-                      selectedTask?.status === "active" && { color: "#fff" },
+                      selectedTask.status === "done" && { color: "#000", fontWeight: "bold" },
                       // selectedTask?.status === "inactive" && styles.statusOvalLabelSelected,
                     ]}
                   >
-                    Active
+                    Done
                   </Text>
-                  {/* <Text
-                    style={[
-                      styles.statusBoxText,
-                      selectedTask.status === "active" && styles.statusBoxTextSelected,
-                    ]}
-                  >
-                    Active
-                  </Text> */}
                 </TouchableOpacity>
 
+                {/* In progress */}
                 <TouchableOpacity
-                  style={[styles.statusOval, selectedTask.status === "inactive" && styles.statusOvalSelected]}
-                  onPress={() => handleSetInactiveTask()}
+                  style={[
+                    styles.statusOval,
+                    selectedTask.status === "in progress" && styles.statusOvalSelected,
+                  ]}
+                  onPress={() => handleSetInProgress()}
                 >
                   <View
                     style={[
                       styles.statusOvalCircle,
                       { backgroundColor: "#999" },
-                      selectedTask.status !== "inactive" && { opacity: 0.5 },
+                      selectedTask.status !== "in progress" && { opacity: 0.5 },
                     ]}
                   />
                   <Text
                     style={[
                       styles.statusOvalLabel,
-                      selectedTask?.status === "inactive" && { color: "#fff" },
+                      selectedTask.status === "in progress" && { color: "#000", fontWeight: "bold" },
                       // selectedTask?.status === "inactive" && styles.statusOvalLabelSelected,
                     ]}
                   >
-                    Inactive
+                    In progress
                   </Text>
-                  {/* <Text
-                    style={[
-                      styles.statusBoxText,
-                      selectedTask.status === "inactive" && styles.statusBoxTextSelected,
-                    ]}
-                  >
-                    Inactive
-                  </Text> */}
                 </TouchableOpacity>
               </View>
 
-              {/* Rij 2: Out of Stock / Edit */}
+              {/* Rij 2: Active / Out of Stock */}
               <View style={styles.statusGridRow}>
+                {/* Active */}
                 <TouchableOpacity
-                  style={[
-                    styles.statusOval,
-                    selectedTask.status === "out of stock" && styles.statusOvalSelected,
-                  ]}
-                  onPress={async () => {
-                    await updateTaskInstanceStatus(selectedTask.id, "out of stock");
-                    const updatedSections = sections.map((sec) => {
-                      if (sec.id !== selectedTask.section.id) return sec;
-                      return {
-                        ...sec,
-                        tasks: sec.tasks.map((t) =>
-                          t.id === selectedTask.id ? { ...t, status: "out of stock" } : t
-                        ),
-                      };
-                    });
-                    setSections(updatedSections);
-                    closeTaskDetailsModal();
-                  }}
+                  style={[styles.statusOval, selectedTask.status === "active" && styles.statusOvalSelected]}
+                  onPress={handleSetActiveTask}
                 >
                   <View
                     style={[
                       styles.statusOvalCircle,
                       { backgroundColor: "#FF6347" }, // Tomaat-rood
-                      selectedTask.status !== "out of stock" && { opacity: 0.5 },
+                      selectedTask.status !== "active" && { opacity: 0.5 },
                     ]}
                   >
                     {/* voorbeeld van icoontje */}
@@ -552,22 +548,63 @@ export default function InactiveScreen() {
                   <Text
                     style={[
                       styles.statusOvalLabel,
-                      selectedTask?.status === "out of stock" && { color: "#fff" },
-                      // selectedTask?.status === "out of stock" && styles.statusOvalLabelSelected,
+                      selectedTask.status === "active" && { color: "#000", fontWeight: "bold" },
                     ]}
                   >
-                    Out of stock
+                    Active
                   </Text>
-                  {/* <Text
-                    style={[
-                      styles.statusBoxText,
-                      selectedTask.status === "out of stock" && styles.statusBoxTextSelected,
-                    ]}
-                  >
-                    Out of stock
-                  </Text> */}
                 </TouchableOpacity>
 
+                {/* Out of Stock */}
+                <TouchableOpacity
+                  style={[
+                    styles.statusOval,
+                    selectedTask.status === "out of stock" && styles.statusOvalSelected,
+                  ]}
+                  onPress={handleSetOutOfStock}
+                >
+                  <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
+                    <Ionicons name="create" size={14} color="#fff" />
+                  </View>
+                  <Text
+                    style={[
+                      styles.statusOvalLabel,
+                      selectedTask.status === "out of stock" && { color: "#000", fontWeight: "bold" },
+                    ]}
+                  >
+                    Out of Stock
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Rij 3: Inactive / Edit */}
+              <View style={styles.statusGridRow}>
+                {/* Inactive */}
+                <TouchableOpacity
+                  style={[styles.statusOval, selectedTask.status === "inactive" && styles.statusOvalSelected]}
+                  onPress={handleSetInactiveTask}
+                >
+                  <View
+                    style={[
+                      styles.statusOvalCircle,
+                      { backgroundColor: "#999" }, // Tomaat-rood
+                      selectedTask.status !== "inactive" && { opacity: 0.5 },
+                    ]}
+                  >
+                    {/* voorbeeld van icoontje */}
+                    <Ionicons name="alert" size={14} color="#fff" />
+                  </View>
+                  <Text
+                    style={[
+                      styles.statusOvalLabel,
+                      selectedTask.status === "inactive" && { color: "#000", fontWeight: "bold" },
+                    ]}
+                  >
+                    Inactive
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Edit */}
                 <TouchableOpacity style={styles.statusOval} onPress={() => console.log("Edit")}>
                   <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
                     <Ionicons name="create" size={14} color="#fff" />
@@ -576,11 +613,6 @@ export default function InactiveScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-
-            {/* Close button onderaan - MODAL ZOU MOETEN SLUITEN WANNEER JE NAAST DE MODAL KLIKT -> GEEN CLOSE BUTTON NODIG */}
-            {/* <TouchableOpacity onPress={closeTaskDetailsModal} style={styles.closeButton2}>
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity> */}
           </Pressable>
         </Pressable>
       </Modal>
@@ -611,18 +643,57 @@ export default function InactiveScreen() {
         renderItem={({ item: sec }) => (
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>{sec.section_name}</Text>
-            {sec.tasks.map((task) => (
-              <TouchableOpacity
-                key={task.id}
-                style={styles.taskItem}
-                onPress={() => openTaskDetailsModal(task)}
-              >
-                <Text style={{ color: task.status === "active" ? "#000" : "#666" }}>
-                  {cleanTaskName(task.task_name)}
-                </Text>
-              </TouchableOpacity>
-            ))}
 
+            {sec.tasks.map((task) => {
+              const meta = STATUS_META[task.status] || {
+                backgroundColor: "transparent",
+                borderColor: "#ccc",
+              };
+
+              return (
+                <View key={task.id} style={styles.taskItemRow}>
+                  {/* 1) Cirkel links */}
+                  <Pressable onPress={() => handleCirclePress(task)} style={styles.taskStatusCircleContainer}>
+                    <View
+                      style={[
+                        styles.taskStatusCircle,
+                        { backgroundColor: meta.backgroundColor },
+                        meta.borderColor ? { borderWidth: 1, borderColor: meta.borderColor } : {},
+                      ]}
+                    >
+                      {meta.icon && <Ionicons name={meta.icon} size={12} color={meta.iconColor} />}
+                    </View>
+                  </Pressable>
+
+                  {/* 2) Resterende (taak)rij opent modal */}
+                  <Pressable style={styles.taskTextContainer} onPress={() => openTaskDetailsModal(task)}>
+                    <Text
+                      style={[
+                        styles.taskText,
+                        task.status === "done" ? styles.doneText : styles.inactiveText,
+                      ]}
+                    >
+                      {cleanTaskName(task.task_name)}
+                    </Text>
+                  </Pressable>
+
+                  {/* ③ kleine assigned‑thumbnails */}
+                  <View style={styles.assignedBubbles}>
+                    {task.assigned_to?.map((pid) => {
+                      const prof = allProfiles.find((p) => p.id === pid);
+                      if (!prof) return null;
+                      const initials = generateInitials(prof.first_name, prof.last_name);
+                      const bg = getColorFromId(prof.id);
+                      return (
+                        <View key={pid} style={[styles.bubbleSmall, { backgroundColor: bg }]}>
+                          <Text style={styles.bubbleSmallText}>{initials}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
             {/* Button om een nieuwe taak toe te voegen aan de sectie */}
             <TouchableOpacity style={styles.addTaskButton} onPress={() => openAddTaskModal(sec.id)}>
               <Text style={styles.addTaskText}>+ Voeg taak toe</Text>
@@ -649,23 +720,23 @@ export default function InactiveScreen() {
               placeholder="Naam van de taak"
             />
             <TouchableOpacity style={styles.saveButton} onPress={handleCreateTask}>
-              <Text style={{ color: "#fff" }}>Opslaan</Text>
+              <Text style={styles.saveButtonText}>Opslaan</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelButton} onPress={closeAddTaskModal}>
-              <Text>Annuleren</Text>
+              <Text style={styles.cancelButtonText}>Annuleren</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
 
       {/* --- Modal: Taakdetails --- */}
-      {renderTaskModal()}
+      {renderTeamMepModal()}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f6f6f6", paddingTop: 40 },
+  container: { flex: 1, backgroundColor: "#f6f6f6", paddingTop: 25 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 8 },
   backText: { color: "#666", fontSize: 16 },
@@ -679,11 +750,11 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
-  taskItem: { backgroundColor: "#eee", marginBottom: 6, padding: 10, borderRadius: 6 },
-  addTaskButton: { marginTop: 6, paddingVertical: 8 },
+  // taskItem: { backgroundColor: "#eee", marginBottom: 6, padding: 10, borderRadius: 6 },
+  addTaskButton: { marginTop: 16, paddingVertical: 0 },
   addTaskText: { color: "#666" },
 
-  // -- Modals --
+  // -- Modals styling --
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "flex-end" },
 
   // De 'onderste' container waarin de inhoud van de modal komt (zoals in je voorbeeld)
@@ -691,9 +762,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
     paddingTop: 20,
-    paddingBottom: 40,
+    paddingBottom: 0,
   },
   modalContent: {
     backgroundColor: "#fff",
@@ -702,13 +773,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 12,
     paddingTop: 30,
   },
-  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 24, color: "#333" },
+  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10, color: "#333" },
   modalTaskTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
-    textAlign: "left",
-    marginBottom: 20,
+    textAlign: "center",
+    marginBottom: 10,
   },
 
   input: { backgroundColor: "#f2f2f2", padding: 8, borderRadius: 6, marginBottom: 12 },
@@ -719,12 +790,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
+  saveButtonText: { color: "#fff", fontWeight: "bold" },
   cancelButton: { padding: 10, alignItems: "center" },
+  cancelButtonText: { color: "#333", fontWeight: "bold" },
 
   // -- Assign to styling --
-  // assignContainer: {
-  //   marginBottom: 16,
-  // },
   assignTitle: {
     fontSize: 16,
     fontWeight: "600",
@@ -748,15 +818,71 @@ const styles = StyleSheet.create({
   profileBubbleSelected: {
     backgroundColor: "#6C63FF",
     borderWidth: 3,
-    // borderColor: "#4838e8",
     borderColor: "black",
   },
   profileBubbleText: {
     color: "#fff",
     fontWeight: "bold",
+    fontSize: 15,
+  },
+  taskItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    marginBottom: 6,
+    padding: 10,
+    borderRadius: 6,
+    // backgroundColor: "#eee",
+    // marginBottom: 8,
+    // paddingVertical: 12,
+    // paddingHorizontal: 16,
+  },
+  taskStatusCircleContainer: {
+    width: 1,
+    alignItems: "center",
+    marginRight: 26,
+  },
+  taskStatusCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  taskTextContainer: {
+    flex: 1,
+  },
+  taskText: {
+    fontSize: 16,
+    color: "#333",
+    fontWeight: "500",
+  },
+  doneText: {
+    color: "#000",
+    fontWeight: "700",
+  },
+  inactiveText: {
+    color: "#666",
+  },
+  assignedBubbles: {
+    flexDirection: "row",
+    marginLeft: 8,
+  },
+  bubbleSmall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginLeft: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bubbleSmallText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
 
-  // 2x2 knoppen layout voor de status
+  // 3x3 knoppen layout voor de status
   statusGridContainer: {
     marginBottom: 24,
   },
@@ -771,22 +897,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 12,
+    gap: 6,
   },
   /* De ovale container */
   statusOval: {
     flex: 1, // zodat ze even breed worden
-    flexDirection: "row", // horizontaal: cirkel links + label rechts
+    flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 4, // kleine marge
-    // paddingVertical: 12,
-    // paddingHorizontal: 16,
-    borderRadius: 50, // Hoog radius voor ovale vorm
-    // backgroundColor: "#eee", // Basiskleur
+    marginHorizontal: 0,
+    borderRadius: 50,
     backgroundColor: "#f2f2f2",
   },
   // Als de status “geselecteerd” is, kun je wat highlight geven
   statusOvalSelected: {
-    backgroundColor: "#6C63FF",
+    backgroundColor: "#9fdc8ab5",
   },
   statusOvalCircle: {
     width: 38,
@@ -804,18 +928,4 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
   },
-
-  // Sluitknop helemaal onderaan
-  // closeButton2: {
-  //   marginTop: 16,
-  //   alignSelf: "center",
-  //   paddingVertical: 8,
-  //   paddingHorizontal: 24,
-  //   backgroundColor: "#eee",
-  //   borderRadius: 8,
-  // },
-  // closeButtonText: {
-  //   color: "#333",
-  //   fontSize: 16,
-  // },
 });

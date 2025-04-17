@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { ProfileContext } from "@/services/ProfileContext";
 import { logoutUser } from "@/services/api/logout";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function ProfileMenuScreen() {
   const router = useRouter();
@@ -22,17 +23,18 @@ export default function ProfileMenuScreen() {
         <Text style={styles.headerText}>Profiel</Text>
       </View>
 
-      {/* Menu-items */}
+      {/* Profielen */}
       <TouchableOpacity
         style={styles.menuItem}
         onPress={() => {
-          // Ga naar /profiles om actief profiel te wisselen
           router.push("/profiles?force=true");
         }}
       >
         <Text style={styles.menuItemText}>Profielen</Text>
+        <Ionicons name="chevron-forward" size={16} color="black" />
       </TouchableOpacity>
 
+      {/* Kaart selecteren */}
       <TouchableOpacity
         style={styles.menuItem}
         onPress={() => {
@@ -41,8 +43,10 @@ export default function ProfileMenuScreen() {
         }}
       >
         <Text style={styles.menuItemText}>Selecteer kaart</Text>
+        <Ionicons name="chevron-forward" size={16} color="black" />
       </TouchableOpacity>
 
+      {/* Instellingen */}
       <TouchableOpacity
         style={styles.menuItem}
         onPress={() => {
@@ -50,11 +54,14 @@ export default function ProfileMenuScreen() {
           console.log("Instellingen...");
         }}
       >
-        <Text style={styles.menuItemText}>Settings</Text>
+        <Text style={styles.menuItemText}>Instellingen</Text>
+        <Ionicons name="chevron-forward" size={16} color="black" />
       </TouchableOpacity>
 
+      {/* Uitloggen */}
       <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-        <Text style={[styles.menuItemText, { color: "#e53935" }]}>Sign out</Text>
+        <Text style={[styles.menuItemText, { color: "#e53935" }]}>Uitloggen</Text>
+        <Ionicons name="chevron-forward" size={16} color="black" />
       </TouchableOpacity>
     </View>
   );
@@ -76,12 +83,15 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#fff",
     padding: 16,
     borderRadius: 8,
     marginBottom: 12,
   },
   menuItemText: {
+    flex: 1,
     fontSize: 16,
     color: "#333",
     fontWeight: "500",

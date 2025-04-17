@@ -1,9 +1,10 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import CalendarModal from "./CalendarModal";
 
 type DateSelectorProps = {
-  selectedDate: string /* bv. "2025-03-20" */;
+  selectedDate: string;
   onDateChange: (newDate: string) => void /* callback om de datum te wijzigen */;
 };
 
@@ -19,10 +20,16 @@ function getNextDate(currentDate: string): string {
   return date.toISOString().split("T")[0];
 }
 
-/* Check of de ISO-string gelijk is aan 'vandaag' */
 function isToday(dateString: string): boolean {
   const todayISO = new Date().toISOString().split("T")[0];
   return dateString === todayISO;
+}
+
+function isYesterday(dateString: string): boolean {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  const yesterdayISO = date.toISOString().split("T")[0];
+  return dateString === yesterdayISO;
 }
 
 function isTomorrow(dateString: string): boolean {
@@ -32,18 +39,45 @@ function isTomorrow(dateString: string): boolean {
   return dateString === tomorrowISO;
 }
 
+function formatDateString(dateString: string): string {
+  const dateObj = new Date(dateString);
+  if (isNaN(dateObj.getTime())) return dateString;
+  return dateObj.toLocaleDateString("nl-NL", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export default function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) {
-  /* Bepaal wat er in de UI getoond moet worden: "Today", "Tomorrow" of de datum zelf) */
+  const [calendarVisible, setCalendarVisible] = useState(false);
+
   let displayText = selectedDate;
   if (isToday(selectedDate)) {
-    displayText = "Today";
+    displayText = "Vandaag";
+  } else if (isYesterday(selectedDate)) {
+    displayText = "Gisteren";
   } else if (isTomorrow(selectedDate)) {
-    displayText = "Tomorrow";
+    displayText = "Morgen";
+  } else {
+    displayText = formatDateString(selectedDate);
   }
+
+  /* Bij tikken op de datumtekst → open de kalender-modal */
+  const handlePressDateText = () => {
+    setCalendarVisible(true);
+  };
+
+  /* Bij tikken op Done → sluit de kalender-modal en wijzigt de datum */
+  const handleSelectDate = (newDate: string) => {
+    onDateChange(newDate);
+    setCalendarVisible(false);
+  };
 
   return (
     <View style={styles.dateContainer}>
       <View style={styles.dateOval}>
+        {/* Vorige dag */}
         <TouchableOpacity
           style={styles.chevronCircle}
           onPress={() => onDateChange(getPrevDate(selectedDate))}
@@ -51,9 +85,12 @@ export default function DateSelector({ selectedDate, onDateChange }: DateSelecto
           <Ionicons name="chevron-back" size={14} color="#000" />
         </TouchableOpacity>
 
-        {/* Wordt later vervangen voor dynamische datum-aanduiding */}
-        <Text style={styles.dateText}>{displayText}</Text>
+        {/* Tikken op de datumtekst opent de kalender-modal */}
+        <TouchableOpacity onPress={handlePressDateText}>
+          <Text style={styles.dateText}>{displayText}</Text>
+        </TouchableOpacity>
 
+        {/* Volgende dag */}
         <TouchableOpacity
           style={styles.chevronCircle}
           onPress={() => onDateChange(getNextDate(selectedDate))}
@@ -61,6 +98,14 @@ export default function DateSelector({ selectedDate, onDateChange }: DateSelecto
           <Ionicons name="chevron-forward" size={14} color="#000" />
         </TouchableOpacity>
       </View>
+
+      {/* De modal met de Calendar erin */}
+      <CalendarModal
+        visible={calendarVisible}
+        onClose={() => setCalendarVisible(false)}
+        selectedDate={selectedDate}
+        onSelectDate={handleSelectDate}
+      />
     </View>
   );
 }
@@ -69,7 +114,7 @@ const styles = StyleSheet.create({
   dateContainer: {
     alignItems: "center",
     justifyContent: "center",
-    marginVertical: 10,
+    marginVertical: 0,
   },
   dateOval: {
     flexDirection: "row",

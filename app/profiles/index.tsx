@@ -7,31 +7,46 @@ import {
   StyleSheet,
   TextInput,
   KeyboardAvoidingView,
-  ScrollView,
   Platform,
-  // ActivityIndicator,
+  Modal,
+  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { createProfile, fetchProfiles } from "@/services/api/profiles";
+import { createProfile, fetchProfiles, updateProfile, deleteProfile } from "@/services/api/profiles";
 import { ProfileContext, ProfileData } from "@/services/ProfileContext";
 import { supabase } from "@/services/supabaseClient";
+
+/* Functie om de initialen van een profiel te genereren */
+// const generateInitials = (firstName: string, lastName: string): string => {
+//   /* Controleer of voornaam en achternaam bestaan en niet null/undefined zijn */
+//   const firstInitial = firstName ? firstName.charAt(0).toUpperCase() : "";
+//   const lastInitial = lastName ? lastName.charAt(0).toUpperCase() : "";
+//   return `${firstInitial}${lastInitial}`;
+// };
 
 export default function ChooseProfileScreen() {
   const router = useRouter();
   const searchParams = useLocalSearchParams<{ force?: string }>(); /* voor toegang tot de query parameters */
   const { activeProfile, setActiveProfile } = useContext(ProfileContext);
-  const [profiles, setProfiles] = useState<any[]>([]);
+  const [kitchenId, setKitchenId] = useState<string | null>(null);
+  // const [profiles, setProfiles] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<ProfileData[]>([]);
   const [loading, setLoading] = useState(true);
 
-  /* State voor het toevoegen van een nieuw profiel */
+  /* State voor openen/sluiten Modal & nieuw profiel toevoegen */
+  const [showAddModal, setShowAddModal] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [kitchenId, setKitchenId] = useState<string | null>(null);
-  
+
+  /* State voor “Edit/Delete profile” modal */
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [editProfileId, setEditProfileId] = useState<string | null>(null);
+
   useEffect(() => {
-    // Als er al een actief profiel is en de query parameter 'force' niet is meegegeven, redirigeer dan naar de HomeScreen.
+    /* Als er al een actief profiel is en de query parameter 'force' niet is meegegeven, redirigeer dan naar de HomeScreen */
     if (activeProfile && !searchParams.force) {
       router.replace("/");
     }
@@ -43,8 +58,6 @@ export default function ChooseProfileScreen() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      console.log("User:", user);
-
       if (!user) {
         router.replace("/auth");
         return;
@@ -53,7 +66,6 @@ export default function ChooseProfileScreen() {
       /* Haal de kitchen_id uit user_metadata (of elders) */
       const kId = user.user_metadata.kitchen_id;
       setKitchenId(kId);
-      console.log("Kitchen_id:", kId);
 
       if (!kId) {
         console.log("Geen kitchen_id gevonden in user_metadata");
@@ -85,7 +97,7 @@ export default function ChooseProfileScreen() {
       /* Reset de velden */
       setFirstName("");
       setLastName("");
-      setShowAddForm(false);
+      setShowAddModal(false);
     } catch (error: any) {
       console.log("Error creating profile:", error.message);
       alert("Er is iets misgegaan bij het aanmaken van het profiel.");
@@ -96,6 +108,56 @@ export default function ChooseProfileScreen() {
     setActiveProfile(profile);
     router.push("/");
   };
+  /* Handler om de Edit/Delete modal te tonen */
+  const handleShowEditModal = (profile: ProfileData) => {
+    setEditProfileId(profile.id);
+    setEditFirstName(profile.first_name);
+    setEditLastName(profile.last_name);
+    setShowEditModal(true);
+  };
+
+  /* Handler om changes in de modal op te slaan */
+  const handleSaveEditProfile = async () => {
+    if (!editProfileId || !editFirstName.trim() || !editLastName.trim()) return;
+    try {
+      /* Voer de update in de database uit */
+      const updatedProfile = await updateProfile(editProfileId, editFirstName, editLastName);
+      /* Update de lokale profielen state */
+      const updatedList = profiles.map((p) =>
+        p.id === editProfileId
+          ? { ...p, first_name: updatedProfile.first_name, last_name: updatedProfile.last_name }
+          : p
+      );
+      setProfiles(updatedList);
+      /* Als het profiel dat je bewerkt ook actief is, update dan ook de context */
+      if (activeProfile && activeProfile.id === editProfileId) {
+        setActiveProfile({
+          ...activeProfile,
+          first_name: updatedProfile.first_name,
+          last_name: updatedProfile.last_name,
+        });
+      }
+      /* Sluit de edit modal */
+      setShowEditModal(false);
+    } catch (error: any) {
+      console.error("Error saving profile changes:", error.message);
+      alert("Er is iets misgegaan bij het bewerken van het profiel.");
+    }
+  };
+
+  /* Handler om een profiel te verwijderen */
+  const handleDeleteProfile = async () => {
+    if (!editProfileId) return;
+    try {
+      await deleteProfile(editProfileId);
+      const updatedList = profiles.filter((p) => p.id !== editProfileId);
+      setProfiles(updatedList);
+      setShowEditModal(false);
+    } catch (error: any) {
+      console.error("Error deleting profile:", error.message);
+      alert("Er is iets misgegaan bij het verwijderen van het profiel.");
+    }
+  };
 
   const generateInitials = (firstName: string, lastName: string): string => {
     /* Controleer of voornaam en achternaam bestaan en niet null/undefined zijn */
@@ -104,8 +166,8 @@ export default function ChooseProfileScreen() {
     return `${firstInitial}${lastInitial}`;
   };
 
-  /* Renderen van één profiel-item */
-  const renderProfileItem = ({ item }: { item: any }) => {
+  /* Render één profiel-item */
+  const renderProfileItem = ({ item }: { item: ProfileData }) => {
     const initials = generateInitials(item.first_name, item.last_name);
     const fullName = `${item.first_name} ${item.last_name}`.trim();
 
@@ -118,12 +180,100 @@ export default function ChooseProfileScreen() {
     const thumbnailColor = colorPalette[index];
 
     return (
-      <TouchableOpacity style={styles.profileItem} onPress={() => handleSelectProfile(item)}>
-        <View style={[styles.initialsCircle, { backgroundColor: thumbnailColor }]}>
-          <Text style={styles.initialsText}>{initials}</Text>
-        </View>
-        <Text style={styles.profileName}>{fullName}</Text>
-      </TouchableOpacity>
+      <View style={styles.profileRow}>
+        <TouchableOpacity style={styles.profileItem} onPress={() => handleSelectProfile(item)}>
+          <View style={[styles.initialsCircle, { backgroundColor: thumbnailColor }]}>
+            <Text style={styles.initialsText}>{initials}</Text>
+          </View>
+          <Text style={styles.profileName}>{fullName}</Text>
+        </TouchableOpacity>
+
+        {/* Drie puntjes-knop rechts (kebab menu) */}
+        <TouchableOpacity style={styles.moreButton} onPress={() => handleShowEditModal(item)}>
+          <Ionicons name="ellipsis-horizontal" size={22} color="#666" />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+  /* Modal voor nieuw profiel toevoegen */
+  const renderAddProfileModal = () => {
+    return (
+      <Modal
+        visible={showAddModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        {/* Buitenste laag die de achtergrond dimt */}
+        <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Nieuw profiel</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Voornaam"
+              value={firstName}
+              onChangeText={setFirstName}
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Achternaam"
+              value={lastName}
+              onChangeText={setLastName}
+              autoCorrect={false}
+            />
+            <TouchableOpacity style={styles.saveButton} onPress={handleCreateProfile}>
+              <Text style={styles.saveButtonText}>Opslaan</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
+              <Text style={styles.cancelButtonText}>Annuleren</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+  };
+
+  /* Modal voor Edit/Delete profiel */
+  const renderEditProfileModal = () => {
+    return (
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowEditModal(false)}>
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Profiel bewerken</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Voornaam"
+              value={editFirstName}
+              onChangeText={setEditFirstName}
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Achternaam"
+              value={editLastName}
+              onChangeText={setEditLastName}
+              autoCorrect={false}
+            />
+            <TouchableOpacity style={styles.saveButton} onPress={handleSaveEditProfile}>
+              <Text style={styles.saveButtonText}>Opslaan</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.deleteButton, { marginTop: 12 }]} onPress={handleDeleteProfile}>
+              <Text style={styles.deleteButtonText}>Verwijderen</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowEditModal(false)}>
+              <Text style={styles.cancelButtonText}>Annuleren</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     );
   };
 
@@ -145,9 +295,9 @@ export default function ChooseProfileScreen() {
         {/* Header met chevron en tekst "Kies je profiel" */}
         <View style={styles.headerRow}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.replace("/auth")}>
-            <Ionicons name="chevron-back" size={20} color="#666" />
+            <Ionicons name="chevron-back" size={14} color="#666" />
           </TouchableOpacity>
-          <Text style={styles.title}>Kies je profiel</Text>
+          <Text style={styles.title}>Terug naar login</Text>
         </View>
 
         <FlatList
@@ -156,36 +306,15 @@ export default function ChooseProfileScreen() {
           renderItem={renderProfileItem}
           ListEmptyComponent={() => <Text style={styles.emptyText}>Geen profielen gevonden.</Text>}
           keyboardShouldPersistTaps="always"
-          contentContainerStyle={{ paddingBottom: 120 }}
-        />
-
-        <View style={styles.addFormContainer}>
-          {showAddForm ? (
-            <>
-              <TextInput
-                style={styles.input}
-                placeholder="Voornaam"
-                value={firstName}
-                onChangeText={setFirstName}
-                autoCorrect={false}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Achternaam"
-                value={lastName}
-                onChangeText={setLastName}
-                autoCorrect={false}
-              />
-              <TouchableOpacity style={styles.saveButton} onPress={handleCreateProfile}>
-                <Text style={styles.saveButtonText}>Opslaan</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <TouchableOpacity style={styles.addProfileButton} onPress={() => setShowAddForm(true)}>
-              <Text style={styles.addProfileText}>+ Voeg kok toe</Text>
+          contentContainerStyle={{ paddingBottom: 120, paddingTop: 30 }}
+          ListHeaderComponent={
+            <TouchableOpacity style={styles.addProfileButton} onPress={() => setShowAddModal(true)}>
+              <Text style={styles.addProfileText}>+  Voeg kok toe</Text>
             </TouchableOpacity>
-          )}
-        </View>
+          }
+        />
+        {renderAddProfileModal()}
+        {renderEditProfileModal()}
       </View>
     </KeyboardAvoidingView>
   );
@@ -194,7 +323,6 @@ export default function ChooseProfileScreen() {
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    // padding: 16,
     backgroundColor: "#f6f6f6",
   },
   loadingContainer: {
@@ -218,20 +346,35 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     // marginBottom: 16,
   },
-  emptyText: {
-    textAlign: "center",
-    color: "#666",
-    marginVertical: 20,
+
+  /* Profielrij in de FlatList: links item, rechts de 3-puntjes */
+  profileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
+    // paddingHorizontal: 12,
+    // paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 8,
+    marginHorizontal: 16,
   },
   profileItem: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
     padding: 12,
     borderRadius: 12,
-    marginBottom: 8,
-    marginHorizontal: 16,
+    // marginBottom: 8,
+    // marginHorizontal: 16,
   },
+  moreButton: {
+    padding: 4,
+    marginLeft: 6,
+    marginRight: 16,
+  },
+
   initialsCircle: {
     width: 40,
     height: 40,
@@ -248,43 +391,83 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 16,
     color: "#333",
+    fontWeight: "bold",
   },
-  addFormContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#f6f6f6",
+  emptyText: {
+    textAlign: "center",
+    color: "#666",
+    marginVertical: 20,
+  },
+
+  /** “+ Voeg kok toe” button */
+  addProfileButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+    marginHorizontal: 16,
+  },
+  addProfileText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#666",
+    marginLeft: 8,
+  },
+
+  // -- Modal styling --
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
     padding: 16,
-    borderTopWidth: 1,
-    borderColor: "#ddd",
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    paddingTop: 30,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+    color: "#333",
   },
   input: {
-    backgroundColor: "#fff",
-    padding: 10,
+    padding: 8,
     borderRadius: 10,
     marginBottom: 8,
+    borderWidth: 0.5,
+    borderColor: "#ccc",
+    fontSize: 15,
+    backgroundColor: "#fff",
   },
   saveButton: {
-    backgroundColor: "#6C63FF",
-    padding: 14,
-    borderRadius: 10,
-    alignItems: "center",
+    padding: 12,
+    borderRadius: 50,
     marginTop: 4,
+    alignItems: "center",
+    backgroundColor: "#000",
   },
   saveButtonText: {
     color: "#fff",
-    fontWeight: "600",
+    fontWeight: "bold",
+    fontSize: 16,
   },
-  addProfileButton: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 14,
+  cancelButton: { padding: 10, alignItems: "center" },
+  cancelButtonText: { color: "#666", fontWeight: "bold", fontSize: 14 },
+  deleteButton: {
+    padding: 12,
+    borderRadius: 50,
+    marginTop: 4,
     alignItems: "center",
+    backgroundColor: "#f61212",
   },
-  addProfileText: {
-    color: "#666",
-    fontWeight: "600",
+  deleteButtonText: {
+    color: "#000",
+    fontWeight: "bold",
     fontSize: 16,
   },
 });

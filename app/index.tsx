@@ -11,7 +11,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  FlatList,
+  Pressable,
 } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { ProfileContext } from "@/services/ProfileContext";
@@ -23,29 +23,36 @@ import StatsSection from "@/components/StatsSection";
 import SectionItems, { SectionData } from "@/components/SectionItems";
 import {
   fetchMyTasksCount,
-  fetchInactiveTasksCount,
   fetchAllDonePercentage,
   fetchActiveCountPerSection,
+  fetchActiveTasksCount,
+  fetchOutOfStockTasksCount,
 } from "@/services/api/taskStats";
 import { supabase } from "@/services/supabaseClient";
+import Ionicons from "@expo/vector-icons/build/Ionicons";
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user, loading } = useContext(AuthContext);
   const { activeProfile, setActiveProfile } = useContext(ProfileContext);
   const { selectedDate, setSelectedDate } = useContext(DateContext);
-  const [menuVisible, setMenuVisible] = useState(false);
+
+  /* State voor secties */
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loadingSections, setLoadingSections] = useState(true);
-  const [showAddSectionForm, setShowAddSectionForm] = useState(false);
-  const [newSectionName, setNewSectionName] = useState("");
-  const [newSectionStartDate, setNewSectionStartDate] = useState<string>(selectedDate);
-  const [newSectionEndDate, setNewSectionEndDate] = useState<string>(selectedDate);
-  const [myTasksCount, setMyTasksCount] = useState(0);
-  const [inactiveTasksCount, setInactiveTasksCount] = useState(0);
+
+  /* State voor StatsSection & Count SectionItems */
+  const [myMepCount, setMyMepCount] = useState(0);
+  const [teamMepCount, setTeamMepCount] = useState(0);
   const [allPercentage, setAllPercentage] = useState(0);
   const [outOfStockCount, setOutOfStockCount] = useState(0);
   const [activeTasksCountPerSection, setActiveTasksCountPerSection] = useState<Record<string, number>>({});
+
+  /* State voor Modal -> nieuwe sectie toevoegen */
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newSectionName, setNewSectionName] = useState("");
+  const [newSectionStartDate, setNewSectionStartDate] = useState<string>(selectedDate);
+  const [newSectionEndDate, setNewSectionEndDate] = useState<string>(selectedDate);
 
   /* Check of de user ingelogd is - anders redirect naar auth/login */
   useEffect(() => {
@@ -54,24 +61,19 @@ export default function HomeScreen() {
     }
   }, [loading, user]);
 
-  /* Zodra de user (en dus kitchen_id) beschikbaar is, en wanneer selectedDate wijzigt,
-  roep je loadSections aan om de secties op te halen voor de kitchen */
+  /* Haal de secties op en update de tellers */
   useEffect(() => {
-    if (user) {
-      const kitchenId = user.user_metadata?.kitchen_id;
-      if (kitchenId) {
-        loadSections(kitchenId);
-        updateActiveTasksCount();
-      }
+    if (!user) return;
+    const kitchenId = user.user_metadata?.kitchen_id;
+    if (kitchenId) {
+      loadSections(kitchenId);
+      updateStats(); // stats voor MyTasks, Inactive, etc.
     }
   }, [user, selectedDate]);
 
   /* Update beide tellers bij initial load en datum wisseling */
   useEffect(() => {
-    updateMyTasksCount();
-    updateInactiveTasksCount();
-    updateActiveTasksCount();
-    updateAllPercentage();
+    updateStats();
   }, [activeProfile, selectedDate]);
 
   /* Real-time subscription instellen voor task_instances tabel */
@@ -89,10 +91,7 @@ export default function HomeScreen() {
         },
         (payload: any) => {
           console.log("Realtime update (task_instances):", payload);
-          updateMyTasksCount();
-          updateInactiveTasksCount();
-          updateAllPercentage();
-          updateActiveTasksCount();
+          updateStats();
         }
       )
       .subscribe();
@@ -102,36 +101,6 @@ export default function HomeScreen() {
       channel.unsubscribe();
     };
   }, [user, activeProfile, selectedDate]);
-
-  /* Haal het percentage “done” op van alle taken in de hele keuken (ongeacht assigned_to) */
-  async function updateAllPercentage() {
-    const percentage = await fetchAllDonePercentage(selectedDate);
-    setAllPercentage(percentage);
-  }
-  /* Haal "My tasks" count op en update deze state */
-  async function updateMyTasksCount() {
-    if (activeProfile) {
-      const count = await fetchMyTasksCount(activeProfile.id, selectedDate);
-      setMyTasksCount(count);
-    }
-  }
-  /* Haal "Inactive tasks" count op en update deze state */
-  async function updateInactiveTasksCount() {
-    const count = await fetchInactiveTasksCount(selectedDate);
-    setInactiveTasksCount(count);
-  }
-  /* Haal "Active tasks" count op en update deze state */
-  async function updateActiveTasksCount() {
-    if (activeProfile && selectedDate && user) {
-      const kitchenId = user.user_metadata?.kitchen_id;
-      if (kitchenId) {
-        const activeCounts = await fetchActiveCountPerSection(kitchenId, selectedDate);
-        setActiveTasksCountPerSection(activeCounts);
-      }
-    }
-  }
-
-  /* --- Functies voor secties & logout --- */
 
   /* Functie: Laadt alle secties voor de gegeven kitchen_id
   Opmerking: je kunt hier eventueel de datum als filter meegeven als je secties datumgebonden wilt maken,
@@ -150,7 +119,6 @@ export default function HomeScreen() {
         task_templates: section.task_templates || [],
       }));
       setSections(mappedSections);
-      // console.log("Sections loaded:", mappedSections);
     } catch (error: any) {
       console.error("Error loading sections:", error.message);
     } finally {
@@ -183,10 +151,35 @@ export default function HomeScreen() {
       setNewSectionName("");
       setNewSectionStartDate(selectedDate);
       setNewSectionEndDate(selectedDate);
-      setShowAddSectionForm(false);
+      setShowAddModal(false);
     } catch (error: any) {
       console.error("Error creating section:", error.message);
       alert("Er ging iets mis bij het aanmaken van de sectie");
+    }
+  }
+  /* Update de StatsSection counts & activeTasksCountPerSection */
+  async function updateStats() {
+    if (!user) return;
+    const kitchenId = user.user_metadata?.kitchen_id;
+    if (!kitchenId) return;
+
+    const allPercentage = await fetchAllDonePercentage(selectedDate);
+    setAllPercentage(allPercentage);
+
+    if (activeProfile) {
+      const myMepCount = await fetchMyTasksCount(activeProfile.id, selectedDate);
+      setMyMepCount(myMepCount);
+    }
+
+    const activeCountTeamMep = await fetchActiveTasksCount(selectedDate);
+    setTeamMepCount(activeCountTeamMep);
+
+    const outOfStockCount = await fetchOutOfStockTasksCount(selectedDate);
+    setOutOfStockCount(outOfStockCount);
+
+    if (kitchenId) {
+      const activeCount = await fetchActiveCountPerSection(kitchenId, selectedDate);
+      setActiveTasksCountPerSection(activeCount);
     }
   }
 
@@ -219,6 +212,52 @@ export default function HomeScreen() {
   const initials = generateInitials(activeProfile?.first_name, activeProfile?.last_name);
   const avatarColor = activeProfile ? getColorFromId(activeProfile.id) : "#6C63FF";
 
+  const renderAddSectionModal = () => {
+    return (
+      <Modal
+        visible={showAddModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        {/* Buitenste laag die de achtergrond dimt */}
+        <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            {/* <View style={styles.modalContent}> */}
+            <Text style={styles.modalTitle}>Nieuwe sectie</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Sectie naam"
+              value={newSectionName}
+              onChangeText={setNewSectionName}
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Startdatum (YYYY-MM-DD)"
+              value={newSectionStartDate}
+              onChangeText={setNewSectionStartDate}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Einddatum (YYYY-MM-DD)"
+              value={newSectionEndDate}
+              onChangeText={setNewSectionEndDate}
+            />
+
+            <TouchableOpacity style={styles.saveButton} onPress={handleCreateSection}>
+              <Text style={styles.saveButtonText}>Opslaan</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
+              <Text style={styles.cancelButtonText}>Annuleren</Text>
+            </TouchableOpacity>
+            {/* </View> */}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+  };
+
   /* Render: Als loading of loadingSections true is, toon een indicator */
   if (loading || loadingSections) {
     return (
@@ -235,10 +274,11 @@ export default function HomeScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
+      {/* Outer container met flex: 1 */}
       <View style={styles.container}>
         {/* Header - Logo / DateSelector / Avatar */}
         <View style={styles.header}>
-          <Image source={require("../assets/images/kitchenmonks-logo.png")} style={styles.logo} />
+          <Image source={require("../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
           <DateSelector selectedDate={selectedDate} onDateChange={handleDateChange} />
 
           <TouchableOpacity onPress={() => router.push("/profile/menu")}>
@@ -252,57 +292,36 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Zoekbalk & Datum / Statistieken */}
+        {/* 1) SearchBar */}
         <SearchBar />
-        <StatsSection
-          myTasksCount={myTasksCount}
-          inactiveTasksCount={inactiveTasksCount}
-          allPercentage={allPercentage}
-          outOfStockCount={outOfStockCount}
-        />
-        <SectionItems
-          sections={sections}
-          onPressSection={handlePressSection}
-          activeTasksCountPerSection={activeTasksCountPerSection}
-        />
+
+        {/* 2) Een View met flex: 1 waarin SectionItems rendert */}
+        <View style={styles.listContainer}>
+          <SectionItems
+            ListHeaderComponent={
+              <View>
+                <StatsSection
+                  myMepCount={teamMepCount}
+                  teamMepCount={teamMepCount}
+                  allPercentage={allPercentage}
+                  outOfStockCount={outOfStockCount}
+                />
+
+                {/* De “+ Voeg sectie toe” Button, die de modal opent */}
+                <TouchableOpacity style={styles.addSectionButton} onPress={() => setShowAddModal(true)}>
+                  <Text style={styles.addSectionText}>+  Voeg sectie toe</Text>
+                  <Ionicons name="chevron-forward" size={16} color="black" />
+                </TouchableOpacity>
+              </View>
+            }
+            sections={sections}
+            onPressSection={handlePressSection}
+            activeTasksCountPerSection={activeTasksCountPerSection}
+          />
+        </View>
 
         {/* Formulier om een nieuwe sectie toe te voegen */}
-        <View style={styles.addFormContainer}>
-          {showAddSectionForm ? (
-            <View style={styles.addSectionForm}>
-              <TextInput
-                style={styles.input}
-                placeholder="Sectie naam"
-                value={newSectionName}
-                onChangeText={setNewSectionName}
-                autoCorrect={false}
-              />
-              {/* Hier een Date Picker gebruiken! */}
-              <TextInput
-                style={styles.input}
-                placeholder="Startdatum (YYYY-MM-DD)"
-                value={newSectionStartDate}
-                onChangeText={setNewSectionStartDate}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Einddatum (YYYY-MM-DD)"
-                value={newSectionEndDate}
-                onChangeText={setNewSectionEndDate}
-              />
-              <TouchableOpacity style={styles.saveButton} onPress={handleCreateSection}>
-                <Text style={styles.saveButtonText}>Opslaan</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddSectionForm(false)}>
-                <Text style={styles.cancelButtonText}>Annuleren</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.addSectionButton} onPress={() => setShowAddSectionForm(true)}>
-              <Text style={styles.addSectionText}>+ Voeg sectie toe</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        {renderAddSectionModal()}
       </View>
     </KeyboardAvoidingView>
   );
@@ -313,7 +332,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f6f6f6",
     paddingHorizontal: 16,
-    paddingTop: 40,
+    paddingTop: 25,
   },
   loadingContainer: {
     flex: 1,
@@ -324,10 +343,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  listContainer: {
+    flex: 1,
   },
   logo: {
-    width: 40,
-    height: 40,
+    width: 35,
+    height: 35,
     resizeMode: "contain",
   },
   avatarCircle: {
@@ -336,7 +359,6 @@ const styles = StyleSheet.create({
     borderRadius: 17.5,
     justifyContent: "center",
     alignItems: "center",
-    // backgroundColor: "#6C63FF",
   },
   avatarText: {
     color: "#fff",
@@ -348,80 +370,61 @@ const styles = StyleSheet.create({
     height: 35,
     resizeMode: "contain",
   },
-  taskItem: {
-    backgroundColor: "#fff",
-    marginBottom: 8,
-    padding: 12,
-    borderRadius: 8,
-  },
-  addFormContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#f6f6f6",
-    padding: 16,
-    borderTopWidth: 1,
-    borderColor: "#ddd",
-  },
-  addSectionForm: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 16,
-    marginVertical: 16,
-  },
-  cancelButton: { alignItems: "center", padding: 10 },
-  cancelButtonText: { color: "#666" },
-  input: {
-    backgroundColor: "#fff",
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 8,
-  },
-  saveButton: {
-    backgroundColor: "#6C63FF",
-    padding: 14,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  saveButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  addSectionButton: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 14,
-    alignItems: "center",
-  },
-  addSectionText: {
-    color: "#666",
-    fontWeight: "600",
-    fontSize: 16,
-  },
+
+  // -- Modal styling --
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.3)",
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: "flex-end",
   },
-  menuContainer: {
+  modalContent: {
+    backgroundColor: "#fff",
+    padding: 16,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    paddingTop: 30,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+    color: "#333",
+  },
+  input: {
+    backgroundColor: "#f2f2f2",
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 12,
+  },
+  saveButton: {
+    backgroundColor: "#6C63FF",
+    padding: 10,
+    borderRadius: 6,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  saveButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  cancelButton: { padding: 10, alignItems: "center" },
+  cancelButtonText: { color: "#666", fontWeight: "bold" },
+  addSectionButton: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#fff",
     borderRadius: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    width: 200,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
+    paddingLeft: 18,
+    paddingRight: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
+    marginBottom: 8,
   },
-  menuItem: {
-    paddingVertical: 8,
-  },
-  menuText: {
+  addSectionText: {
+    flex: 1,
     fontSize: 16,
-    textAlign: "center",
+    color: "#666",
+    opacity: 0.7,
+    fontWeight: "600",
   },
 });

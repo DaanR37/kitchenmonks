@@ -62,7 +62,7 @@ export default function SignupScreen() {
         <View style={styles.container}>
           {/* Logo KM hier */}
           <View style={styles.logoContainer}>
-            <Image source={require("../../assets/images/logo-login-screen.png")} style={styles.logo} />
+            <Image source={require("../../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
             <Text style={styles.title}>KITCHENMONKS</Text>
           </View>
 
@@ -115,7 +115,8 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: "center",
-    marginBottom: 12,
+    justifyContent: "center",
+    // marginBottom: 12,
   },
   logo: {
     width: 100,

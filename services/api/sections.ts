@@ -27,21 +27,16 @@ export async function fetchSections(kitchenId: string /* date: string */) {
   - Deze start_date en end_date bepalen de geldigheidsperiode waarin de sectie (menukaart) geldig is.
   - Na de insert wordt de nieuwe sectie teruggegeven als een enkel object (via .maybeSingle()).
 */
-export async function createSection(
-  kitchenId: string, 
-  name: string, 
-  startDate: string, 
-  endDate: string
-) {
+export async function createSection(kitchenId: string, name: string, startDate: string, endDate: string) {
   const { data, error } = await supabase
     .from("sections")
     .insert([
-      { 
-        kitchen_id: kitchenId, 
-        section_name: name, 
-        start_date: startDate, 
-        end_date: endDate 
-      }
+      {
+        kitchen_id: kitchenId,
+        section_name: name,
+        start_date: startDate,
+        end_date: endDate,
+      },
     ])
     .select() /* Retourneert de ingevoegde rij */
     .maybeSingle(); /* Verwacht dat er één rij terugkomt */

@@ -1,19 +1,20 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 type StatsSectionProps = {
   allPercentage: number;
+  teamMepCount: number;
+  myMepCount: number;
   outOfStockCount: number;
-  myTasksCount: number;
-  inactiveTasksCount: number;
 };
 
 export default function StatsSection({
   allPercentage,
+  teamMepCount,
+  myMepCount,
   outOfStockCount,
-  myTasksCount,
-  inactiveTasksCount,
 }: StatsSectionProps) {
   const router = useRouter();
 
@@ -24,42 +25,50 @@ export default function StatsSection({
         {/* All */}
         <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/allTasks")}>
           <View style={styles.statLeft}>
-            <View style={[styles.circle, { backgroundColor: "#0066ff" }]} />
+            <View style={[styles.circle, { backgroundColor: "#0066ff" }]}>
+              <Ionicons name="layers-outline" size={16} color="#fff" />
+            </View>
             <Text style={styles.statLabel}>All</Text>
           </View>
           {/* Toon percentage voltooide taken */}
           <Text style={styles.statValue}>{allPercentage}%</Text>
         </TouchableOpacity>
 
-        {/* Out of stock */}
-        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/outOfStock")}>
+        {/* Team MEP */}
+        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/teamMep")}>
           <View style={styles.statLeft}>
-            <View style={[styles.circle, { backgroundColor: "#FF6347" }]} />
-            <Text style={styles.statLabel}>Out of stock</Text>
+            <View style={[styles.circle, { backgroundColor: "#00bb06" }]}>
+              <Ionicons name="people-outline" size={16} color="#fff" />
+            </View>
+            <Text style={styles.statLabel}>Team MEP</Text>
           </View>
-          {/* Toon aantal out of stock taken */}
-          <Text style={styles.statValue}>{outOfStockCount}</Text>
+          <Text style={styles.statValue}>{teamMepCount}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Rij 2, met "My tasks" (links) en "Inactive" (rechts) */}
       <View style={styles.statsRow}>
-        {/* My tasks */}
-        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/myTasks")}>
+        {/* My MEP */}
+        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/myMep")}>
           <View style={styles.statLeft}>
-            <View style={[styles.circle, { backgroundColor: "#ff9000" }]} />
-            <Text style={styles.statLabel}>My tasks</Text>
+            <View style={[styles.circle, { backgroundColor: "#ff9000" }]}>
+              <Ionicons name="person-outline" size={16} color="#fff" />
+            </View>
+            <Text style={styles.statLabel}>My MEP</Text>
           </View>
-          <Text style={styles.statValue}>{myTasksCount}</Text>
+          <Text style={styles.statValue}>{myMepCount}</Text>
         </TouchableOpacity>
 
-        {/* Inactive tasks */}
-        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/inactive")}>
+        {/* Out of stock */}
+        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/outOfStock")}>
           <View style={styles.statLeft}>
-            <View style={[styles.circle, { backgroundColor: "#00bb06" }]} />
-            <Text style={styles.statLabel}>Inactive</Text>
+            <View style={[styles.circle, { backgroundColor: "#FF6347" }]}>
+              <Ionicons name="cart-outline" size={16} color="#fff" />
+            </View>
+            <Text style={styles.statLabel}>Out of stock</Text>
           </View>
-          <Text style={styles.statValue}>{inactiveTasksCount}</Text>
+          {/* Toon aantal out of stock taken */}
+          <Text style={styles.statValue}>{outOfStockCount}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -68,30 +77,26 @@ export default function StatsSection({
 
 const styles = StyleSheet.create({
   statsContainer: {
-    marginVertical: 16,
+    marginVertical: 12,
   },
-  // Een rij met twee boxen naast elkaar
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12, // beetje extra ruimte tussen rijen
+    marginBottom: 12,
   },
-  // Standaard-’box’ voor de statistiek, halve breedte
   statBox: {
     width: "48%",
     backgroundColor: "#fff",
     borderRadius: 16,
-    padding: 16,
+    padding: 12,
     flexDirection: "row",
     justifyContent: "space-between",
-    // Optioneel: schaduw, elevation etc.
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  // De linkerhelft van statBox, met een kleine circle en een titel
   statLeft: {
     flexDirection: "column",
   },
@@ -100,18 +105,19 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     marginBottom: 6,
+    alignItems: "center",
+    justifyContent: "center",
   },
   statLabel: {
     fontSize: 16,
     fontWeight: "500",
-    marginBottom: 4,
+    marginTop: 2,
+    marginBottom: 0,
     color: "#333",
   },
-  // De (hoofd)waarde die aan de rechterkant wordt weergegeven
   statValue: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "700",
     color: "#333",
-    alignSelf: "center",
   },
 });

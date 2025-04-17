@@ -22,21 +22,26 @@ type Props = {
   sections: SectionData[];
   onPressSection: (sectionId: string) => void;
   activeTasksCountPerSection: Record<string, number>;
+  ListHeaderComponent: React.ReactElement | React.ComponentType<any> | null;
 };
 
-export default function SectionItems({ sections, onPressSection, activeTasksCountPerSection }: Props) {
+export default function SectionItems({
+  sections,
+  onPressSection,
+  activeTasksCountPerSection,
+  ListHeaderComponent,
+}: Props) {
   /* Render functie voor een enkele sectie-item */
   const renderItem = ({ item }: { item: SectionData }) => {
     /* Haal het aantal actieve taken voor deze sectie op via de meegegeven prop */
     const activeCount = activeTasksCountPerSection[item.id] ?? 0;
     return (
       <TouchableOpacity style={styles.sectionItem} onPress={() => onPressSection(item.id)}>
-        {/* Toon het aantal actieve taken */}
-        <Text style={styles.count}>{activeCount}</Text>
-        {/* Toon de naam van de sectie */}
+        <View style={styles.countCircle}>
+          <Text style={styles.count}>{activeCount}</Text>
+        </View>
         <Text style={styles.sectionName}>{item.section_name}</Text>
-        {/* Toon een pijltje (chevron) als indicatie dat het item klikbaar is */}
-        {/* <Ionicons name="chevron-forward" size={16} color="black" /> */}
+        <Ionicons name="chevron-forward" size={14} color="black" />
       </TouchableOpacity>
     );
   };
@@ -47,15 +52,16 @@ export default function SectionItems({ sections, onPressSection, activeTasksCoun
       data={sections}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
-      // Indien gewenst: voeg extra props toe (zoals contentContainerStyle) voor padding of marges
       contentContainerStyle={{ paddingBottom: 16 }}
+      keyboardShouldPersistTaps="always"
+      ListHeaderComponent={ListHeaderComponent}
     />
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 16,
+    flex: 1,
   },
   sectionItem: {
     flexDirection: "row",
@@ -65,13 +71,22 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
   },
-  count: {
+  countCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#f0f0f0",
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: 12,
-    fontWeight: "bold",
-    color: "#666",
+  },
+
+  count: {
+    fontWeight: "700",
+    color: "#333",
   },
   sectionName: {
-    // flex: 1, /* Hiermee wordt de naam over de beschikbare ruimte verdeeld */
+    flex: 1 /* Hiermee wordt de naam over de beschikbare ruimte verdeeld */,
     fontSize: 16,
     color: "#333",
   },

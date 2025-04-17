@@ -6,6 +6,7 @@ export type ProfileData = {
   first_name: string;
   last_name: string;
   thumbnail_color?: string;
+  // kitchen_id?: string;
 };
 
 type ProfileContextType = {
@@ -23,7 +24,6 @@ type ProfileProviderProps = {
 };
 
 export function ProfileProvider({ children }: ProfileProviderProps) {
-  // const [activeProfileId, setActiveProfileIdState] = useState<string | null>(null);
   const [activeProfile, setActiveProfileState] = useState<ProfileData | null>(null);
 
   /* Bij eerste mount: haal de profielID uit AsyncStorage */

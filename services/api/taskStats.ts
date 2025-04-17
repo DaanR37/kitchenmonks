@@ -64,21 +64,37 @@ export async function fetchMyTasksCount(profileId: string, date: string): Promis
 }
 
 /**
- * Haal het aantal inactive taken op voor een bepaalde keuken.
+ * Haal het aantal active taken op voor een bepaalde keuken.
  */
-export async function fetchInactiveTasksCount(date: string): Promise<number> {
-  const { data, count, error } = await supabase
+export async function fetchActiveTasksCount(date: string): Promise<number> {
+  const { count, error } = await supabase
     .from("task_instances")
-    /* Gebruik head:true en count:"exact" om alleen het aantal rijen terug te krijgen */
     .select("id", { count: "exact", head: true })
-    .eq("status", "inactive")
+    .eq("status", "active")
     .eq("date", date);
 
   if (error) {
-    console.error("Error fetching inactive tasks count:", error);
+    console.error("Error fetching active tasks count:", error);
     return 0;
   }
-  return count || 0;
+  return count ?? 0;
+}
+
+/**
+ * Haal het aantal task_instances op met status 'out of stock' voor een gegeven datum.
+ */
+export async function fetchOutOfStockTasksCount(date: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("task_instances")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "out of stock")
+    .eq("date", date);
+
+  if (error) {
+    console.error("Error fetching out‑of‑stock count:", error);
+    return 0;
+  }
+  return count ?? 0;
 }
 
 /**
