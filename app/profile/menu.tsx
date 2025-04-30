@@ -1,9 +1,10 @@
 import React, { useContext } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { ProfileContext } from "@/services/ProfileContext";
 import { logoutUser } from "@/services/api/logout";
 import { Ionicons } from "@expo/vector-icons";
+import AppText from "@/components/AppText";
 
 export default function ProfileMenuScreen() {
   const router = useRouter();
@@ -20,7 +21,7 @@ export default function ProfileMenuScreen() {
     <View style={styles.container}>
       {/* Header / Titel */}
       <View style={styles.headerRow}>
-        <Text style={styles.headerText}>Profiel</Text>
+        <AppText style={styles.headerText}>Profiel</AppText>
       </View>
 
       {/* Profielen */}
@@ -30,7 +31,7 @@ export default function ProfileMenuScreen() {
           router.push("/profiles?force=true");
         }}
       >
-        <Text style={styles.menuItemText}>Profielen</Text>
+        <AppText style={styles.menuItemText}>Profielen</AppText>
         <Ionicons name="chevron-forward" size={16} color="black" />
       </TouchableOpacity>
 
@@ -42,7 +43,7 @@ export default function ProfileMenuScreen() {
           console.log("Kaart selecteren...");
         }}
       >
-        <Text style={styles.menuItemText}>Selecteer kaart</Text>
+        <AppText style={styles.menuItemText}>Selecteer kaart</AppText>
         <Ionicons name="chevron-forward" size={16} color="black" />
       </TouchableOpacity>
 
@@ -54,13 +55,13 @@ export default function ProfileMenuScreen() {
           console.log("Instellingen...");
         }}
       >
-        <Text style={styles.menuItemText}>Instellingen</Text>
+        <AppText style={styles.menuItemText}>Instellingen</AppText>
         <Ionicons name="chevron-forward" size={16} color="black" />
       </TouchableOpacity>
 
       {/* Uitloggen */}
       <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-        <Text style={[styles.menuItemText, { color: "#e53935" }]}>Uitloggen</Text>
+        <AppText style={[styles.menuItemText, { color: "#e53935" }]}>Uitloggen</AppText>
         <Ionicons name="chevron-forward" size={16} color="black" />
       </TouchableOpacity>
     </View>

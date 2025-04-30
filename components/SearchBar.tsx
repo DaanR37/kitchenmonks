@@ -18,8 +18,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#eaeaea",
     borderRadius: 22,
     paddingHorizontal: 12,
-    paddingVertical: 0,
-    marginTop: 14,
+    height: 40,
+    // paddingVertical: 12,
+    // marginTop: 14,
     marginBottom: 8,
   },
   searchIcon: {

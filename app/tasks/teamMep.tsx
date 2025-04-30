@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useContext } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   Modal,
   FlatList,
-  TextInput,
   Pressable,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -18,13 +16,13 @@ import { getTasksForSectionOnDate } from "@/services/api/taskHelpers"; /* Haal d
 import {
   updateTaskInstanceStatus,
   assignTaskInstance,
-  createTaskInstance,
   updateTaskInstanceInProgress,
   updateTaskInstanceDone,
+  // updateTaskInstanceOutOfStock,
 } from "@/services/api/taskInstances";
-import { createTaskTemplate } from "@/services/api/taskTemplates";
 import { fetchProfiles } from "@/services/api/profiles";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
+import AppText from "@/components/AppText";
 
 /* 
   Type definitie voor een task (taakinstance) 
@@ -81,9 +79,6 @@ export default function TeamMepScreen() {
   const { selectedDate } = useContext(DateContext);
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [addTaskModalVisible, setAddTaskModalVisible] = useState(false);
-  const [addTaskSectionId, setAddTaskSectionId] = useState<string | null>(null);
-  const [newTaskName, setNewTaskName] = useState("");
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
@@ -121,38 +116,25 @@ export default function TeamMepScreen() {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
+
     setLoading(true);
     try {
       /* 1) Haal alle secties op voor de keuken */
-      const secs = await fetchSections(kitchenId);
+      const secs = await fetchSections(kitchenId, selectedDate);
       /* 2) Voor elke sectie: haal de taken voor de geselecteerde datum op en voeg de section-gegevens (inclusief datums) toe */
       const merged: SectionData[] = await Promise.all(
         secs.map(async (sec: any) => {
           /* Haal de taken op voor deze sectie voor de geselecteerde datum. */
           const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
 
-          /* Voor elke taak voegen we handmatig de sectiegegevens toe, zodat later de modal hierop kan vertrouwen */
-          // const tasksWithSection = tasks.map((t: any) => ({
-          //   ...t,
-          //   section: {
-          //     id: sec.id,
-          //     section_name: sec.section_name,
-          //     start_date: sec.start_date,
-          //     end_date: sec.end_date,
-          //   },
-          // }));
-
-          /* Geef de sectie terug met alle relevante informatie, inclusief start en eind datum */
-          // return {
-          //   id: sec.id,
-          //   section_name: sec.section_name,
-          //   start_date: sec.start_date, //Parent start datum
-          //   end_date: sec.end_date, //Parent eind datum
-          //   tasks: tasksWithSection,
-          // };
-
           const tasks = allTasks
-            .filter((t) => t.status === "active" || t.status === "in progress" || t.status === "done")
+            .filter(
+              (t) =>
+                t.status === "active" ||
+                t.status === "in progress" ||
+                t.status === "done" ||
+                t.status === "out of stock"
+            )
             .map((t: any) => ({
               ...t,
               section: {
@@ -179,71 +161,6 @@ export default function TeamMepScreen() {
       console.log("Error loading inactive tasks:", error);
     } finally {
       setLoading(false);
-    }
-  }
-  /*
-    handleCreateTask:
-    - Wordt aangeroepen wanneer de gebruiker in de "Nieuwe taak" modal op Opslaan drukt.
-    - Controleert eerst of er een sectie geselecteerd is en dat er een taaknaam is ingevoerd.
-    - Vervolgens:
-      1. Probeert bestaande task_templates op te halen voor de geselecteerde sectie en datum.
-      2. Als er al templates bestaan, gebruikt hij er één (bijv. de eerste).
-      3. Als er geen template bestaat, maakt hij er een aan met createTaskTemplate.
-      4. Daarna wordt met het verkregen templateId een nieuwe task instance aangemaakt via createTaskInstance.
-      5. De nieuwe taakinstance wordt toegevoegd aan de lokale state zodat de UI wordt bijgewerkt.
-  */
-  async function handleCreateTask() {
-    /* Controleer of er een sectie is geselecteerd en dat er een taaknaam is ingevoerd */
-    if (!addTaskSectionId || !newTaskName.trim()) return;
-    try {
-      /* Zoek de oudersectie op in de lokale state, zodat we de start- en einddatum ervan hebben */
-      const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
-      if (!sectionObj) {
-        console.log("Geen section data gevonden voor addTaskSectionId:", addTaskSectionId);
-        return;
-      }
-
-      /* Maak altijd een nieuwe task template aan. We voegen een timestamp toe voor uniciteit,
-      maar nu gebruiken we de start_date en end_date van de sectie als de geldigheidsperiode */
-      const newTemplate = await createTaskTemplate(
-        addTaskSectionId,
-        newTaskName + " " + new Date().getTime(),
-        sectionObj.start_date, // Gebruik de parent start datum
-        sectionObj.end_date // Gebruik de parent eind datum
-      );
-
-      const templateId = newTemplate.id; /* Verkrijg de nieuwe task_template_id */
-
-      /*  Maak een nieuwe task instance aan voor de geselecteerde datum.
-      De task instance krijgt zijn datum (bijv. "Today" of de geselecteerde dag) */
-      const newTask = await createTaskInstance(templateId, selectedDate);
-      newTask.task_name = newTaskName;
-      newTask.assigned_to = []; /* Begin met een lege array */
-
-      /* Voeg de sectiegegevens toe aan de nieuwe taak, zodat we bijvoorbeeld later in de modal de parent-informatie kunnen tonen */
-      newTask.section = { id: sectionObj.id, section_name: sectionObj.section_name };
-
-      // const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
-      // if (sectionObj) {
-      //   /* Voeg alle relevante sectiegegevens toe */
-      //   newTask.section = { id: sectionObj.id, section_name: sectionObj.section_name };
-      // } else {
-      //   /* Als er geen section in de lokale state gevonden wordt, log dit voor debugging */
-      //   console.log("Warning: Geen section data gevonden voor addTaskSectionId:", addTaskSectionId);
-      // }
-
-      /* Update de lokale state door de nieuwe taak toe te voegen aan de taken van de juiste sectie */
-      const updatedSections = sections.map((sec) => {
-        if (sec.id === addTaskSectionId) {
-          return { ...sec, tasks: [...sec.tasks, newTask] };
-        }
-        return sec;
-      });
-      setSections(updatedSections);
-    } catch (error) {
-      console.log("Error creating task:", error);
-    } finally {
-      closeAddTaskModal();
     }
   }
 
@@ -346,18 +263,6 @@ export default function TeamMepScreen() {
     );
   }
 
-  /* Handlers voor de "Nieuwe taak" modal */
-  function openAddTaskModal(sectionId: string) {
-    setAddTaskSectionId(sectionId);
-    setNewTaskName("");
-    setAddTaskModalVisible(true);
-  }
-  function closeAddTaskModal() {
-    setAddTaskSectionId(null);
-    setNewTaskName("");
-    setAddTaskModalVisible(false);
-  }
-
   /* Handlers voor de taak details modal */
   function openTaskDetailsModal(task: TaskRow) {
     setSelectedTask(task);
@@ -439,7 +344,7 @@ export default function TeamMepScreen() {
               onPress={() => handleToggleAssignTask(profile.id)}
               key={profile.id}
             >
-              <Text style={styles.profileBubbleText}>{initials}</Text>
+              <AppText style={styles.profileBubbleText}>{initials}</AppText>
             </TouchableOpacity>
           );
         }}
@@ -460,15 +365,15 @@ export default function TeamMepScreen() {
         <Pressable style={styles.modalOverlay} onPress={closeTaskDetailsModal}>
           <Pressable style={styles.bottomModalContainer} onPress={(e) => e.stopPropagation()}>
             {/* Taaknaam */}
-            <Text style={styles.modalTaskTitle}>{cleanTaskName(selectedTask.task_name)}</Text>
-            <Text style={styles.assignTitle}>Assign to:</Text>
+            <AppText style={styles.modalTaskTitle}>{cleanTaskName(selectedTask.task_name)}</AppText>
+            <AppText style={styles.assignTitle}>Assign to:</AppText>
 
             {/* Horizontale slider met profielen */}
             {renderProfileBubbles()}
 
             {/* Status-keuzes in 3x3 layout, etc. */}
             <View style={styles.statusGridContainer}>
-              <Text style={styles.statusGridTitle}>Status</Text>
+              <AppText style={styles.statusGridTitle}>Status</AppText>
 
               {/* Rij 1: Done / In progress */}
               <View style={styles.statusGridRow}>
@@ -490,7 +395,7 @@ export default function TeamMepScreen() {
                   </View>
 
                   {/* Tekst in de ovale knop */}
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "done" && { color: "#000", fontWeight: "bold" },
@@ -498,7 +403,7 @@ export default function TeamMepScreen() {
                     ]}
                   >
                     Done
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
 
                 {/* In progress */}
@@ -516,7 +421,7 @@ export default function TeamMepScreen() {
                       selectedTask.status !== "in progress" && { opacity: 0.5 },
                     ]}
                   />
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "in progress" && { color: "#000", fontWeight: "bold" },
@@ -524,7 +429,7 @@ export default function TeamMepScreen() {
                     ]}
                   >
                     In progress
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               </View>
 
@@ -545,14 +450,14 @@ export default function TeamMepScreen() {
                     {/* voorbeeld van icoontje */}
                     <Ionicons name="alert" size={14} color="#fff" />
                   </View>
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "active" && { color: "#000", fontWeight: "bold" },
                     ]}
                   >
                     Active
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
 
                 {/* Out of Stock */}
@@ -566,14 +471,14 @@ export default function TeamMepScreen() {
                   <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
                     <Ionicons name="create" size={14} color="#fff" />
                   </View>
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "out of stock" && { color: "#000", fontWeight: "bold" },
                     ]}
                   >
                     Out of Stock
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               </View>
 
@@ -594,14 +499,14 @@ export default function TeamMepScreen() {
                     {/* voorbeeld van icoontje */}
                     <Ionicons name="alert" size={14} color="#fff" />
                   </View>
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "inactive" && { color: "#000", fontWeight: "bold" },
                     ]}
                   >
                     Inactive
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
 
                 {/* Edit */}
@@ -609,7 +514,7 @@ export default function TeamMepScreen() {
                   <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
                     <Ionicons name="create" size={14} color="#fff" />
                   </View>
-                  <Text style={styles.statusOvalLabel}>Edit</Text>
+                  <AppText style={styles.statusOvalLabel}>Edit</AppText>
                 </TouchableOpacity>
               </View>
             </View>
@@ -622,19 +527,22 @@ export default function TeamMepScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading tasks for {selectedDate}...</Text>
+        <AppText>Loading tasks for {selectedDate}...</AppText>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header met een back-button */}
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>{"<"} Inactive</Text>
-        </TouchableOpacity>
+        <AppText style={styles.headerText}>Team MEP</AppText>
       </View>
+
+      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <Ionicons name="chevron-back" size={14} color="#000" />
+        <AppText style={styles.backText}>Back</AppText>
+      </TouchableOpacity>
 
       {/* Lijst met secties en hun taken */}
       <FlatList
@@ -642,7 +550,7 @@ export default function TeamMepScreen() {
         keyExtractor={(sec) => sec.id}
         renderItem={({ item: sec }) => (
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>{sec.section_name}</Text>
+            <AppText style={styles.sectionTitle}>{sec.section_name}</AppText>
 
             {sec.tasks.map((task) => {
               const meta = STATUS_META[task.status] || {
@@ -667,14 +575,14 @@ export default function TeamMepScreen() {
 
                   {/* 2) Resterende (taak)rij opent modal */}
                   <Pressable style={styles.taskTextContainer} onPress={() => openTaskDetailsModal(task)}>
-                    <Text
+                    <AppText
                       style={[
                         styles.taskText,
                         task.status === "done" ? styles.doneText : styles.inactiveText,
                       ]}
                     >
                       {cleanTaskName(task.task_name)}
-                    </Text>
+                    </AppText>
                   </Pressable>
 
                   {/* ③ kleine assigned‑thumbnails */}
@@ -686,7 +594,7 @@ export default function TeamMepScreen() {
                       const bg = getColorFromId(prof.id);
                       return (
                         <View key={pid} style={[styles.bubbleSmall, { backgroundColor: bg }]}>
-                          <Text style={styles.bubbleSmallText}>{initials}</Text>
+                          <AppText style={styles.bubbleSmallText}>{initials}</AppText>
                         </View>
                       );
                     })}
@@ -694,40 +602,9 @@ export default function TeamMepScreen() {
                 </View>
               );
             })}
-            {/* Button om een nieuwe taak toe te voegen aan de sectie */}
-            <TouchableOpacity style={styles.addTaskButton} onPress={() => openAddTaskModal(sec.id)}>
-              <Text style={styles.addTaskText}>+ Voeg taak toe</Text>
-            </TouchableOpacity>
           </View>
         )}
       />
-
-      {/* Modal voor het toevoegen van een nieuwe taak */}
-      <Modal
-        visible={addTaskModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeAddTaskModal}
-      >
-        <Pressable style={styles.modalOverlay} onPress={closeAddTaskModal}>
-          {/* Stop propagatie zodat klikken binnen de modal de modal niet sluit */}
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Nieuwe taak</Text>
-            <TextInput
-              style={styles.input}
-              value={newTaskName}
-              onChangeText={setNewTaskName}
-              placeholder="Naam van de taak"
-            />
-            <TouchableOpacity style={styles.saveButton} onPress={handleCreateTask}>
-              <Text style={styles.saveButtonText}>Opslaan</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={closeAddTaskModal}>
-              <Text style={styles.cancelButtonText}>Annuleren</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       {/* --- Modal: Taakdetails --- */}
       {renderTeamMepModal()}
@@ -738,8 +615,10 @@ export default function TeamMepScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f6f6f6", paddingTop: 25 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 8 },
-  backText: { color: "#666", fontSize: 16 },
+  header: { alignItems: "center", marginBottom: 8 },
+  headerText: { fontSize: 18, fontWeight: "bold" },
+  backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 12 },
+  backText: { fontSize: 17, color: "#666", marginLeft: 4 },
 
   // -- De secties op het hoofdscherm --
   sectionContainer: {
@@ -750,10 +629,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
-  // taskItem: { backgroundColor: "#eee", marginBottom: 6, padding: 10, borderRadius: 6 },
-  addTaskButton: { marginTop: 16, paddingVertical: 0 },
-  addTaskText: { color: "#666" },
-
+  
   // -- Modals styling --
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "flex-end" },
 
@@ -766,14 +642,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 0,
   },
-  modalContent: {
-    backgroundColor: "#fff",
-    padding: 16,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    paddingTop: 30,
-  },
-  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10, color: "#333" },
   modalTaskTitle: {
     fontSize: 18,
     fontWeight: "bold",
@@ -781,19 +649,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 10,
   },
-
-  input: { backgroundColor: "#f2f2f2", padding: 8, borderRadius: 6, marginBottom: 12 },
-  saveButton: {
-    backgroundColor: "#6C63FF",
-    padding: 10,
-    borderRadius: 6,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  saveButtonText: { color: "#fff", fontWeight: "bold" },
-  cancelButton: { padding: 10, alignItems: "center" },
-  cancelButtonText: { color: "#333", fontWeight: "bold" },
-
   // -- Assign to styling --
   assignTitle: {
     fontSize: 16,
@@ -908,7 +763,7 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     backgroundColor: "#f2f2f2",
   },
-  // Als de status “geselecteerd” is, kun je wat highlight geven
+  // Als de status "geselecteerd" is, kun je wat highlight geven
   statusOvalSelected: {
     backgroundColor: "#9fdc8ab5",
   },

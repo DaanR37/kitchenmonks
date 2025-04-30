@@ -1,6 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { View, StyleSheet, TouchableOpacity, FlatList } from "react-native";
+import AppText from "@/components/AppText";
 
 type Task = {
   id: string;
@@ -22,15 +22,9 @@ type Props = {
   sections: SectionData[];
   onPressSection: (sectionId: string) => void;
   activeTasksCountPerSection: Record<string, number>;
-  ListHeaderComponent: React.ReactElement | React.ComponentType<any> | null;
 };
 
-export default function SectionItems({
-  sections,
-  onPressSection,
-  activeTasksCountPerSection,
-  ListHeaderComponent,
-}: Props) {
+export default function SectionItems({ sections, onPressSection, activeTasksCountPerSection }: Props) {
   /* Render functie voor een enkele sectie-item */
   const renderItem = ({ item }: { item: SectionData }) => {
     /* Haal het aantal actieve taken voor deze sectie op via de meegegeven prop */
@@ -38,10 +32,9 @@ export default function SectionItems({
     return (
       <TouchableOpacity style={styles.sectionItem} onPress={() => onPressSection(item.id)}>
         <View style={styles.countCircle}>
-          <Text style={styles.count}>{activeCount}</Text>
+          <AppText style={styles.count}>{activeCount}</AppText>
         </View>
-        <Text style={styles.sectionName}>{item.section_name}</Text>
-        <Ionicons name="chevron-forward" size={14} color="black" />
+        <AppText style={styles.sectionName}>{item.section_name}</AppText>
       </TouchableOpacity>
     );
   };
@@ -54,40 +47,38 @@ export default function SectionItems({
       renderItem={renderItem}
       contentContainerStyle={{ paddingBottom: 16 }}
       keyboardShouldPersistTaps="always"
-      ListHeaderComponent={ListHeaderComponent}
     />
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    // flex: 1,
   },
   sectionItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    marginBottom: 8,
-    padding: 12,
+    paddingHorizontal: 10,
+    marginVertical: 6,
     borderRadius: 8,
+  },
+  sectionName: {
+    fontSize: 14,
+    color: "#333",
   },
   countCircle: {
     width: 28,
     height: 28,
+    marginRight: 12,
     borderRadius: 14,
-    backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
   },
 
   count: {
+    fontSize: 14,
     fontWeight: "700",
-    color: "#333",
-  },
-  sectionName: {
-    flex: 1 /* Hiermee wordt de naam over de beschikbare ruimte verdeeld */,
-    fontSize: 16,
     color: "#333",
   },
 });

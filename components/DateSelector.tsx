@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable } from "react-native";
+import { View, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import CalendarModal from "./CalendarModal";
+import AppText from "@/components/AppText";
 
 type DateSelectorProps = {
   selectedDate: string;
@@ -39,14 +40,14 @@ function isTomorrow(dateString: string): boolean {
   return dateString === tomorrowISO;
 }
 
-function formatDateString(dateString: string): string {
+export function formatDateString(dateString: string): string {
   const dateObj = new Date(dateString);
   if (isNaN(dateObj.getTime())) return dateString;
-  return dateObj.toLocaleDateString("nl-NL", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+
+  const day = dateObj.getDate();
+  const month = dateObj.toLocaleString("nl-NL", { month: "short" });
+
+  return `${day} ${month}`;
 }
 
 export default function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) {
@@ -82,12 +83,12 @@ export default function DateSelector({ selectedDate, onDateChange }: DateSelecto
           style={styles.chevronCircle}
           onPress={() => onDateChange(getPrevDate(selectedDate))}
         >
-          <Ionicons name="chevron-back" size={14} color="#000" />
+          <Ionicons style={styles.chevronIcon} name="chevron-back" size={12} />
         </TouchableOpacity>
 
         {/* Tikken op de datumtekst opent de kalender-modal */}
         <TouchableOpacity onPress={handlePressDateText}>
-          <Text style={styles.dateText}>{displayText}</Text>
+          <AppText style={styles.dateText}>{displayText}</AppText>
         </TouchableOpacity>
 
         {/* Volgende dag */}
@@ -95,7 +96,7 @@ export default function DateSelector({ selectedDate, onDateChange }: DateSelecto
           style={styles.chevronCircle}
           onPress={() => onDateChange(getNextDate(selectedDate))}
         >
-          <Ionicons name="chevron-forward" size={14} color="#000" />
+          <Ionicons style={styles.chevronIcon} name="chevron-forward" size={12} />
         </TouchableOpacity>
       </View>
 
@@ -119,22 +120,24 @@ const styles = StyleSheet.create({
   dateOval: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ffffff",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    padding: 7,
     borderRadius: 999,
-  },
-  dateText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginHorizontal: 8,
+    backgroundColor: "#ffffff",
   },
   chevronCircle: {
     width: 22,
     height: 22,
     borderRadius: 12,
-    backgroundColor: "#eaeaea",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+  },
+  chevronIcon: {
+    color: "#000",
+  },
+  dateText: {
+    fontSize: 15,
+    marginHorizontal: 8,
+    // fontWeight: "600",
   },
 });

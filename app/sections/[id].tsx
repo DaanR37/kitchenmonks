@@ -1,24 +1,33 @@
-import React, { useState, useEffect, useContext } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState, useContext } from "react";
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   Modal,
   FlatList,
+  TextInput,
   Pressable,
+  Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileContext, ProfileData } from "@/services/ProfileContext";
-import { fetchSections } from "@/services/api/sections";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers"; /* Haal de dag-specifieke taken voor een sectie op, door de logica in taskHelpers te gebruiken */
+import {
+  fetchSectionById,
+  updateSectionName,
+  deleteSectionWithCheck,
+  fetchSections,
+} from "@/services/api/sections";
+import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import {
   updateTaskInstanceInProgress,
   updateTaskInstanceDone,
   updateTaskInstanceStatus,
   assignTaskInstance,
+  createTaskInstance,
 } from "@/services/api/taskInstances";
+import { createTaskTemplate } from "@/services/api/taskTemplates";
 import { fetchProfiles } from "@/services/api/profiles";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
 import AppText from "@/components/AppText";
@@ -65,13 +74,23 @@ const STATUS_META: Record<string, StatusMeta> = {
   edit: { backgroundColor: "#000", icon: "create" },
 };
 
-export default function MyMepScreen() {
+export default function SingleSectionScreen() {
   const router = useRouter();
+  // const { id: sectionId } = useLocalSearchParams<{ id: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
   const { activeProfile } = useContext(ProfileContext);
+
   const [sections, setSections] = useState<SectionData[]>([]);
+  const [sectionName, setSectionName] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [addTaskModalVisible, setAddTaskModalVisible] = useState(false);
+  const [addTaskSectionId, setAddTaskSectionId] = useState<string | null>(null);
+  const [newTaskName, setNewTaskName] = useState("");
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
@@ -92,62 +111,137 @@ export default function MyMepScreen() {
     loadProfiles();
   }, [user]);
 
-  /* Laad de secties en per sectie de taakinstances voor de geselecteerde datum */
   useEffect(() => {
-    loadData();
-  }, [selectedDate]);
+    if (typeof id === "string") {
+      loadData(id);
+    }
+  }, [id]);
 
-  /* loadData:
-  - Haal alle secties op voor de keuken
-  - Voor elke sectie: haal de taken op voor de geselecteerde datum
-  - Filter de taken: toon alleen taken waarvoor de actieve profiel-ID voorkomt in de assigned_to array
-  - Voeg de parent sectie-gegevens toe aan elke taak zodat deze beschikbaar zijn voor de modal
-  */
-  async function loadData() {
-    if (!user || !activeProfile) return;
+  async function loadData(sectionId: string) {
+    if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
 
     setLoading(true);
     try {
-      // 1) Haal alle secties op voor de keuken (datumfilter niet toepassen, want secties vormen de vaste menukaart)
-      const secs = await fetchSections(kitchenId, selectedDate);
+      // Haal alle secties op voor deze keuken
+      const allSections = await fetchSections(kitchenId, selectedDate);
 
-      // 2) Voor elke sectie: haal de taken op voor de geselecteerde datum en voeg de section-data toe
-      const merged: SectionData[] = await Promise.all(
-        secs.map(async (sec: any) => {
-          // Haal de taken op voor de sectie via de helper functie
-          const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
-          // Filter de taken: toon alleen taken waarvoor de actieve profiel-ID voorkomt in de assigned_to array
-          const filteredTasks = allTasks.filter((task: TaskRow) => {
-            return task.assigned_to?.includes(activeProfile.id);
-          });
-          // Voeg de parent sectie-gegevens toe aan elke taak zodat deze beschikbaar zijn voor de modal
-          const tasksWithSection = filteredTasks.map((t: any) => ({
-            ...t,
-            section: {
-              id: sec.id,
-              section_name: sec.section_name,
-              start_date: sec.start_date,
-              end_date: sec.end_date,
-            },
-          }));
-          return {
-            id: sec.id,
-            section_name: sec.section_name,
-            start_date: sec.start_date,
-            end_date: sec.end_date,
-            tasks: tasksWithSection,
-          };
-        })
-      );
-      // Optioneel: Filter secties waar geen enkele taak is toegewezen aan activeProfile
-      const sectionsWithTasks = merged.filter((sec) => sec.tasks.length > 0);
-      setSections(sectionsWithTasks);
-    } catch (error) {
-      console.log("Error loading my tasks:", error);
+      // Zoek de juiste sectie op basis van sectionId
+      const selectedSection = allSections.find((sec: any) => sec.id === sectionId);
+      if (!selectedSection) {
+        console.warn("Section niet gevonden met ID:", sectionId);
+        return;
+      }
+
+      // Haal de taken op voor de geselecteerde datum
+      const allTasks = await getTasksForSectionOnDate(sectionId, selectedDate);
+
+      // Voeg sectiegegevens toe aan elke taak
+      const tasksWithSection = allTasks.map((t: any) => ({
+        ...t,
+        section: {
+          id: selectedSection.id,
+          section_name: selectedSection.section_name,
+          start_date: selectedSection.start_date,
+          end_date: selectedSection.end_date,
+        },
+      }));
+
+      // Zet de sectie met zijn taken in de state
+      const finalSection: SectionData = {
+        id: selectedSection.id,
+        section_name: selectedSection.section_name,
+        start_date: selectedSection.start_date,
+        end_date: selectedSection.end_date,
+        tasks: tasksWithSection,
+      };
+
+      setSections([finalSection]); // ← belangrijk: enkele sectie in state
+    } catch (error: any) {
+      console.error("Fout bij laden van sectie:", error.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCreateTask() {
+    /* Controleer of er een sectie is geselecteerd en dat er een taaknaam is ingevoerd */
+    if (!addTaskSectionId || !newTaskName.trim()) return;
+    try {
+      /* Zoek de oudersectie op in de lokale state, zodat we de start- en einddatum ervan hebben */
+      const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
+      if (!sectionObj) {
+        console.log("Geen section data gevonden voor addTaskSectionId:", addTaskSectionId);
+        return;
+      }
+
+      /* Maak altijd een nieuwe task template aan. We voegen een timestamp toe voor uniciteit,
+      maar nu gebruiken we de start_date en end_date van de sectie als de geldigheidsperiode */
+      const newTemplate = await createTaskTemplate(
+        addTaskSectionId,
+        newTaskName + " " + new Date().getTime(),
+        sectionObj.start_date, // Gebruik de parent start datum
+        sectionObj.end_date // Gebruik de parent eind datum
+      );
+
+      const templateId = newTemplate.id; /* Verkrijg de nieuwe task_template_id */
+
+      /*  Maak een nieuwe task instance aan voor de geselecteerde datum.
+      De task instance krijgt zijn datum (bijv. "Today" of de geselecteerde dag) */
+      const newTask = await createTaskInstance(templateId, selectedDate);
+      newTask.task_name = newTaskName;
+      newTask.assigned_to = []; /* Begin met een lege array */
+
+      /* Voeg de sectiegegevens toe aan de nieuwe taak, zodat we bijvoorbeeld later in de modal de parent-informatie kunnen tonen */
+      newTask.section = { id: sectionObj.id, section_name: sectionObj.section_name };
+
+      // const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
+      // if (sectionObj) {
+      //   /* Voeg alle relevante sectiegegevens toe */
+      //   newTask.section = { id: sectionObj.id, section_name: sectionObj.section_name };
+      // } else {
+      //   /* Als er geen section in de lokale state gevonden wordt, log dit voor debugging */
+      //   console.log("Warning: Geen section data gevonden voor addTaskSectionId:", addTaskSectionId);
+      // }
+
+      /* Update de lokale state door de nieuwe taak toe te voegen aan de taken van de juiste sectie */
+      const updatedSections = sections.map((sec) => {
+        if (sec.id === addTaskSectionId) {
+          return { ...sec, tasks: [...sec.tasks, newTask] };
+        }
+        return sec;
+      });
+      setSections(updatedSections);
+    } catch (error) {
+      console.log("Error creating task:", error);
+    } finally {
+      closeAddTaskModal();
+    }
+  }
+
+  async function handleRenameSection() {
+    try {
+      await updateSectionName(id as string, sectionName);
+      setEditing(false);
+    } catch (err) {
+      Alert.alert("Fout", "Kon sectienaam niet aanpassen.");
+    }
+  }
+
+  async function handleDeleteSection() {
+    try {
+      const result = await deleteSectionWithCheck(id as string);
+      if (result === "has_tasks") {
+        Alert.alert(
+          "Let op",
+          "Deze sectie bevat nog taken. Verwijder eerst de taken voordat je de sectie verwijdert."
+        );
+      } else {
+        router.back();
+      }
+    } catch (err) {
+      Alert.alert("Fout", "Sectie kon niet verwijderd worden.");
     }
   }
 
@@ -182,8 +276,8 @@ export default function MyMepScreen() {
     try {
       await updateTaskInstanceInProgress(selectedTask.id);
       refreshSingleStatus("in progress");
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error(error);
     }
   }
   async function handleSetActiveTask() {
@@ -237,7 +331,6 @@ export default function MyMepScreen() {
     if (!selectedTask) return;
     const updated = { ...selectedTask, status, assigned_to };
     setSelectedTask(updated);
-
     setSections((secs) =>
       secs.map((sec) =>
         sec.id !== updated.section.id
@@ -248,6 +341,18 @@ export default function MyMepScreen() {
             }
       )
     );
+  }
+
+  /* Handlers voor de "Nieuwe taak" modal */
+  function openAddTaskModal(sectionId: string) {
+    setAddTaskSectionId(sectionId);
+    setNewTaskName("");
+    setAddTaskModalVisible(true);
+  }
+  function closeAddTaskModal() {
+    setAddTaskSectionId(null);
+    setNewTaskName("");
+    setAddTaskModalVisible(false);
   }
 
   /* Handlers voor de taak details modal */
@@ -336,8 +441,80 @@ export default function MyMepScreen() {
     );
   };
 
+  const renderStatusButtons = () => {
+    const rows = [
+      ["done", "in progress"],
+      ["active", "out of stock"],
+      ["inactive", "edit"],
+    ];
+
+    return rows.map((row, rowIndex) => (
+      <View key={rowIndex} style={styles.statusGridRow}>
+        {row.map((statusKey) => {
+          const meta = STATUS_META[statusKey];
+          const isSelected = selectedTask?.status === statusKey;
+
+          const handlePress = () => {
+            switch (statusKey) {
+              case "done":
+                handleSetDone();
+                break;
+              case "in progress":
+                handleSetInProgress();
+                break;
+              case "active":
+                handleSetActiveTask();
+                break;
+              case "inactive":
+                handleSetInactiveTask();
+                break;
+              case "out of stock":
+                handleSetOutOfStock();
+                break;
+              case "edit":
+                console.log("Edit");
+                break;
+            }
+          };
+
+          return (
+            <TouchableOpacity
+              key={statusKey}
+              style={[
+                styles.statusOval,
+                isSelected && {
+                  backgroundColor: "#e5f4e0", // lichte groene achtergrond
+                  borderColor: "#2e8b57", // groene border
+                  borderWidth: 2,
+                },
+              ]}
+              onPress={handlePress}
+            >
+              <View
+                style={[
+                  styles.statusOvalCircle,
+                  {
+                    backgroundColor: meta.backgroundColor,
+                  },
+                  meta.borderColor ? { borderWidth: 1, borderColor: meta.borderColor } : {},
+                ]}
+              >
+                {meta.icon && <Ionicons name={meta.icon} size={14} color={meta.iconColor || "#000"} />}
+              </View>
+              <AppText style={[styles.statusOvalLabel, isSelected && { color: "#2e8b57", fontWeight: "bold" }]}>
+                {statusKey === "in progress"
+                  ? "In progress"
+                  : statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}
+              </AppText>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    ));
+  };
+
   /* De rest van de modal: */
-  const renderMyMepModal = () => {
+  const renderSingleTaskModal = () => {
     if (!selectedTask) return null;
     return (
       <Modal
@@ -359,148 +536,7 @@ export default function MyMepScreen() {
             <View style={styles.statusGridContainer}>
               <AppText style={styles.statusGridTitle}>Status</AppText>
 
-              {/* Rij 1: Done / In progress */}
-              <View style={styles.statusGridRow}>
-                {/* Done */}
-                <TouchableOpacity
-                  style={[styles.statusOval, selectedTask.status === "done" && styles.statusOvalSelected]}
-                  onPress={handleSetDone}
-                >
-                  {/* Cirkeltje links, evt. met icon */}
-                  <View
-                    style={[
-                      styles.statusOvalCircle,
-                      { backgroundColor: "#00AA00" }, // groen voor active
-                      selectedTask.status !== "done" && { opacity: 0.5 },
-                    ]}
-                  >
-                    {/* Eventueel een icoon */}
-                    {/* <Ionicons name="checkmark" size={14} color="#fff" /> */}
-                  </View>
-
-                  {/* Tekst in de ovale knop */}
-                  <AppText
-                    style={[
-                      styles.statusOvalLabel,
-                      selectedTask.status === "done" && { color: "#000", fontWeight: "bold" },
-                      // selectedTask?.status === "inactive" && styles.statusOvalLabelSelected,
-                    ]}
-                  >
-                    Done
-                  </AppText>
-                </TouchableOpacity>
-
-                {/* In progress */}
-                <TouchableOpacity
-                  style={[
-                    styles.statusOval,
-                    selectedTask.status === "in progress" && styles.statusOvalSelected,
-                  ]}
-                  onPress={() => handleSetInProgress()}
-                >
-                  <View
-                    style={[
-                      styles.statusOvalCircle,
-                      { backgroundColor: "#999" },
-                      selectedTask.status !== "in progress" && { opacity: 0.5 },
-                    ]}
-                  />
-                  <AppText
-                    style={[
-                      styles.statusOvalLabel,
-                      selectedTask.status === "in progress" && { color: "#000", fontWeight: "bold" },
-                      // selectedTask?.status === "inactive" && styles.statusOvalLabelSelected,
-                    ]}
-                  >
-                    In progress
-                  </AppText>
-                </TouchableOpacity>
-              </View>
-
-              {/* Rij 2: Active / Out of Stock */}
-              <View style={styles.statusGridRow}>
-                {/* Active */}
-                <TouchableOpacity
-                  style={[styles.statusOval, selectedTask.status === "active" && styles.statusOvalSelected]}
-                  onPress={handleSetActiveTask}
-                >
-                  <View
-                    style={[
-                      styles.statusOvalCircle,
-                      { backgroundColor: "#FF6347" }, // Tomaat-rood
-                      selectedTask.status !== "active" && { opacity: 0.5 },
-                    ]}
-                  >
-                    {/* voorbeeld van icoontje */}
-                    <Ionicons name="alert" size={14} color="#fff" />
-                  </View>
-                  <AppText
-                    style={[
-                      styles.statusOvalLabel,
-                      selectedTask.status === "active" && { color: "#000", fontWeight: "bold" },
-                    ]}
-                  >
-                    Active
-                  </AppText>
-                </TouchableOpacity>
-
-                {/* Out of Stock */}
-                <TouchableOpacity
-                  style={[
-                    styles.statusOval,
-                    selectedTask.status === "out of stock" && styles.statusOvalSelected,
-                  ]}
-                  onPress={handleSetOutOfStock}
-                >
-                  <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
-                    <Ionicons name="create" size={14} color="#fff" />
-                  </View>
-                  <AppText
-                    style={[
-                      styles.statusOvalLabel,
-                      selectedTask.status === "out of stock" && { color: "#000", fontWeight: "bold" },
-                    ]}
-                  >
-                    Out of Stock
-                  </AppText>
-                </TouchableOpacity>
-              </View>
-
-              {/* Rij 3: Inactive / Edit */}
-              <View style={styles.statusGridRow}>
-                {/* Inactive */}
-                <TouchableOpacity
-                  style={[styles.statusOval, selectedTask.status === "inactive" && styles.statusOvalSelected]}
-                  onPress={handleSetInactiveTask}
-                >
-                  <View
-                    style={[
-                      styles.statusOvalCircle,
-                      { backgroundColor: "#999" }, // Tomaat-rood
-                      selectedTask.status !== "inactive" && { opacity: 0.5 },
-                    ]}
-                  >
-                    {/* voorbeeld van icoontje */}
-                    <Ionicons name="alert" size={14} color="#fff" />
-                  </View>
-                  <AppText
-                    style={[
-                      styles.statusOvalLabel,
-                      selectedTask.status === "inactive" && { color: "#000", fontWeight: "bold" },
-                    ]}
-                  >
-                    Inactive
-                  </AppText>
-                </TouchableOpacity>
-
-                {/* Edit */}
-                <TouchableOpacity style={styles.statusOval} onPress={() => console.log("Edit")}>
-                  <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
-                    <Ionicons name="create" size={14} color="#fff" />
-                  </View>
-                  <AppText style={styles.statusOvalLabel}>Edit</AppText>
-                </TouchableOpacity>
-              </View>
+              {renderStatusButtons()}
             </View>
           </Pressable>
         </Pressable>
@@ -519,16 +555,12 @@ export default function MyMepScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <AppText style={styles.headerText}>My MEP</AppText>
-      </View>
-
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
         <Ionicons name="chevron-back" size={14} color="#000" />
         <AppText style={styles.backText}>Back</AppText>
       </TouchableOpacity>
 
-      {/* FlatList met secties en hun taken (gefilterd op activeProfile) */}
+      {/* FlatList met secties en taken (gefilterd op done/in progress) */}
       <FlatList
         data={sections}
         keyExtractor={(sec) => sec.id}
@@ -569,7 +601,7 @@ export default function MyMepScreen() {
                     </AppText>
                   </Pressable>
 
-                  {/* 3) kleine assigned‑thumbnails */}
+                  {/* ③ kleine assigned‑thumbnails */}
                   <View style={styles.assignedBubbles}>
                     {task.assigned_to?.map((pid) => {
                       const prof = allProfiles.find((p) => p.id === pid);
@@ -586,12 +618,43 @@ export default function MyMepScreen() {
                 </View>
               );
             })}
+            {/* Button om een nieuwe taak toe te voegen aan de sectie */}
+            <TouchableOpacity style={styles.addTaskButton} onPress={() => openAddTaskModal(sec.id)}>
+              <AppText style={styles.addTaskText}>+ Voeg taak toe</AppText>
+            </TouchableOpacity>
           </View>
         )}
       />
 
+      {/* Modal voor het toevoegen van een nieuwe taak */}
+      <Modal
+        visible={addTaskModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeAddTaskModal}
+      >
+        <Pressable style={styles.modalOverlay} onPress={closeAddTaskModal}>
+          {/* Stop propagatie zodat klikken binnen de modal de modal niet sluit */}
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <AppText style={styles.modalTitle}>Nieuwe taak</AppText>
+            <TextInput
+              style={styles.input}
+              value={newTaskName}
+              onChangeText={setNewTaskName}
+              placeholder="Naam van de taak"
+            />
+            <TouchableOpacity style={styles.saveButton} onPress={handleCreateTask}>
+              <AppText style={styles.saveButtonText}>Opslaan</AppText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelButton} onPress={closeAddTaskModal}>
+              <AppText style={styles.cancelButtonText}>Annuleren</AppText>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* --- Modal: Taakdetails --- */}
-      {renderMyMepModal()}
+      {renderSingleTaskModal()}
     </View>
   );
 }
@@ -599,8 +662,6 @@ export default function MyMepScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f6f6f6", paddingTop: 40 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { alignItems: "center", marginBottom: 8 },
-  headerText: { fontSize: 18, fontWeight: "bold" },
   backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 12 },
   backText: { fontSize: 17, color: "#666", marginLeft: 4 },
 

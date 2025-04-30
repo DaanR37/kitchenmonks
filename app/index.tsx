@@ -7,18 +7,18 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Modal,
-  Text,
   TextInput,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  useWindowDimensions,
 } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { ProfileContext } from "@/services/ProfileContext";
 import { DateContext } from "@/services/DateContext";
 import { fetchSections, createSection } from "@/services/api/sections";
-import DateSelector from "@/components/DateSelector";
-import SearchBar from "@/components/SearchBar";
+import DateSelector, { formatDateString } from "@/components/DateSelector";
+// import SearchBar from "@/components/SearchBar";
 import StatsSection from "@/components/StatsSection";
 import SectionItems, { SectionData } from "@/components/SectionItems";
 import {
@@ -29,19 +29,21 @@ import {
   fetchOutOfStockTasksCount,
 } from "@/services/api/taskStats";
 import { supabase } from "@/services/supabaseClient";
-import Ionicons from "@expo/vector-icons/build/Ionicons";
+import CalendarModal from "@/components/CalendarModal";
+import AppText from "@/components/AppText";
+import { Ionicons } from "@expo/vector-icons";
+import AllTasksTabletView from "@/components/AllTasksTabletView";
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { width, height } = useWindowDimensions();
+  const isTabletLandscape = width > 800 && width > height;
+  const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { user, loading } = useContext(AuthContext);
   const { activeProfile, setActiveProfile } = useContext(ProfileContext);
   const { selectedDate, setSelectedDate } = useContext(DateContext);
-
-  /* State voor secties */
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loadingSections, setLoadingSections] = useState(true);
-
-  /* State voor StatsSection & Count SectionItems */
   const [myMepCount, setMyMepCount] = useState(0);
   const [teamMepCount, setTeamMepCount] = useState(0);
   const [allPercentage, setAllPercentage] = useState(0);
@@ -53,6 +55,8 @@ export default function HomeScreen() {
   const [newSectionName, setNewSectionName] = useState("");
   const [newSectionStartDate, setNewSectionStartDate] = useState<string>(selectedDate);
   const [newSectionEndDate, setNewSectionEndDate] = useState<string>(selectedDate);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
   /* Check of de user ingelogd is - anders redirect naar auth/login */
   useEffect(() => {
@@ -65,9 +69,9 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
-    if (kitchenId) {
-      loadSections(kitchenId);
-      updateStats(); // stats voor MyTasks, Inactive, etc.
+    if (kitchenId && selectedDate) {
+      loadSections(kitchenId, selectedDate);
+      updateStats(); /* stats voor MyTasks, Team MEP, Out of Stock, etc. */
     }
   }, [user, selectedDate]);
 
@@ -105,12 +109,14 @@ export default function HomeScreen() {
   /* Functie: Laadt alle secties voor de gegeven kitchen_id
   Opmerking: je kunt hier eventueel de datum als filter meegeven als je secties datumgebonden wilt maken,
   maar in dit voorbeeld haal je alle secties op en filter je ze later in de UI op geldigheid via start- en einddatum. */
-  async function loadSections(kitchenId: string /* date: string */) {
+  async function loadSections(kitchenId: string, selectedDate: string) {
     setLoadingSections(true);
     try {
-      /* We geven hier alleen kitchenId mee, omdat de filtering op datum gebeurt 
-      in de query in Supabase (als je dat wilt inschakelen) */
-      const data = await fetchSections(kitchenId /* date */);
+      /* 1) Haal de secties op die geldig zijn voor de geselecteerde datum */
+      const data = await fetchSections(kitchenId, selectedDate);
+      console.log("data", data);
+
+      /* 2) Map de ruwe data naar SectionData[] zoals jouw app verwacht */
       const mappedSections: SectionData[] = data.map((section: any) => ({
         id: section.id,
         section_name: section.section_name ?? section.name,
@@ -118,6 +124,8 @@ export default function HomeScreen() {
         end_date: section.end_date,
         task_templates: section.task_templates || [],
       }));
+
+      /* 3) Update de lokale state */
       setSections(mappedSections);
     } catch (error: any) {
       console.error("Error loading sections:", error.message);
@@ -189,8 +197,7 @@ export default function HomeScreen() {
   }
   /* Functie: Druk op een sectie in de lijst */
   function handlePressSection(sectionId: string) {
-    /* Hier een navigatie naar een sectiedetailpagina, bijvoorbeeld: router.push(`/sections/${sectionId}`) */
-    console.log("Pressed section:", sectionId);
+    router.push(`/sections/${sectionId}`);
   }
 
   /* Genereer initialen van het actieve profiel, als dit beschikbaar is */
@@ -223,35 +230,61 @@ export default function HomeScreen() {
         {/* Buitenste laag die de achtergrond dimt */}
         <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
           <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            {/* <View style={styles.modalContent}> */}
-            <Text style={styles.modalTitle}>Nieuwe sectie</Text>
+            <AppText style={styles.modalTitle}>Nieuw menu-item</AppText>
+
             <TextInput
               style={styles.input}
-              placeholder="Sectie naam"
+              placeholder="menu-item"
               value={newSectionName}
               onChangeText={setNewSectionName}
               autoCorrect={false}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="Startdatum (YYYY-MM-DD)"
-              value={newSectionStartDate}
-              onChangeText={setNewSectionStartDate}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Einddatum (YYYY-MM-DD)"
-              value={newSectionEndDate}
-              onChangeText={setNewSectionEndDate}
+
+            {/* Kiezen van startdatum */}
+            <AppText style={styles.label}>Startdatum</AppText>
+            <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowStartDatePicker(true)}>
+              <AppText style={styles.datePickerText}>{formatDateString(newSectionStartDate)}</AppText>
+            </TouchableOpacity>
+
+            {/* Kiezen van einddatum */}
+            <AppText style={styles.label}>Einddatum</AppText>
+            <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowEndDatePicker(true)}>
+              <AppText style={styles.datePickerText}>{formatDateString(newSectionEndDate)}</AppText>
+            </TouchableOpacity>
+
+            {/* Opslaan */}
+            <TouchableOpacity style={styles.saveButton} onPress={handleCreateSection}>
+              <AppText style={styles.saveButtonText}>Opslaan</AppText>
+            </TouchableOpacity>
+
+            {/* Annuleren */}
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
+              <AppText style={styles.cancelButtonText}>Annuleren</AppText>
+            </TouchableOpacity>
+
+            {/* Startdatum CalendarModal */}
+            <CalendarModal
+              visible={showStartDatePicker}
+              selectedDate={newSectionStartDate}
+              onClose={() => setShowStartDatePicker(false)}
+              onSelectDate={(date) => {
+                setNewSectionStartDate(date);
+                if (!newSectionEndDate)
+                  setNewSectionEndDate(date); /* Als einddatum nog leeg is, zet gelijk */
+                setShowStartDatePicker(false);
+              }}
             />
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleCreateSection}>
-              <Text style={styles.saveButtonText}>Opslaan</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
-              <Text style={styles.cancelButtonText}>Annuleren</Text>
-            </TouchableOpacity>
-            {/* </View> */}
+            {/* Einddatum CalendarModal */}
+            <CalendarModal
+              visible={showEndDatePicker}
+              selectedDate={newSectionEndDate}
+              onClose={() => setShowEndDatePicker(false)}
+              onSelectDate={(date) => {
+                setNewSectionEndDate(date);
+                setShowEndDatePicker(false);
+              }}
+            />
           </Pressable>
         </Pressable>
       </Modal>
@@ -263,7 +296,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" />
-        <Text>Loading...</Text>
+        <AppText>Loading...</AppText>
       </View>
     );
   }
@@ -274,54 +307,69 @@ export default function HomeScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
-      {/* Outer container met flex: 1 */}
-      <View style={styles.container}>
-        {/* Header - Logo / DateSelector / Avatar */}
-        <View style={styles.header}>
-          <Image source={require("../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
-          <DateSelector selectedDate={selectedDate} onDateChange={handleDateChange} />
+      <View style={[styles.container, isTabletLandscape && styles.rowLayout]}>
+        {/* ----------- Linker Kolom (alleen zichtbaar als niet collapsed) ----------- */}
+        {!isTabletLandscape || !isSidebarCollapsed ? (
+          <View style={styles.leftColumn}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Image source={require("../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
+              <DateSelector selectedDate={selectedDate} onDateChange={handleDateChange} />
 
-          <TouchableOpacity onPress={() => router.push("/profile/menu")}>
-            {activeProfile ? (
-              <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
-                <Text style={styles.avatarText}>{initials}</Text>
-              </View>
-            ) : (
-              <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatar} />
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* 1) SearchBar */}
-        <SearchBar />
-
-        {/* 2) Een View met flex: 1 waarin SectionItems rendert */}
-        <View style={styles.listContainer}>
-          <SectionItems
-            ListHeaderComponent={
-              <View>
-                <StatsSection
-                  myMepCount={teamMepCount}
-                  teamMepCount={teamMepCount}
-                  allPercentage={allPercentage}
-                  outOfStockCount={outOfStockCount}
-                />
-
-                {/* De “+ Voeg sectie toe” Button, die de modal opent */}
-                <TouchableOpacity style={styles.addSectionButton} onPress={() => setShowAddModal(true)}>
-                  <Text style={styles.addSectionText}>+  Voeg sectie toe</Text>
-                  <Ionicons name="chevron-forward" size={16} color="black" />
+              {/* Toggle voor inklappen (alleen op tablet) */}
+              {isTabletLandscape && (
+                <TouchableOpacity onPress={() => setSidebarCollapsed((prev) => !prev)}>
+                  <Ionicons name="chevron-forward" size={16} color="#333" />
                 </TouchableOpacity>
-              </View>
-            }
-            sections={sections}
-            onPressSection={handlePressSection}
-            activeTasksCountPerSection={activeTasksCountPerSection}
-          />
-        </View>
+              )}
 
-        {/* Formulier om een nieuwe sectie toe te voegen */}
-        {renderAddSectionModal()}
+              {/* Avatar */}
+              <TouchableOpacity onPress={() => router.push("/profile/menu")}>
+                {activeProfile ? (
+                  <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
+                    <AppText style={styles.avatarText}>{initials}</AppText>
+                  </View>
+                ) : (
+                  <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatar} />
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Stats */}
+            <StatsSection
+              myMepCount={myMepCount}
+              teamMepCount={teamMepCount}
+              allPercentage={allPercentage}
+              outOfStockCount={outOfStockCount}
+            />
+
+            {/* Secties + Add Button */}
+            <View style={styles.listContainer}>
+              <TouchableOpacity style={styles.addSectionButton} onPress={() => setShowAddModal(true)}>
+                <View style={styles.plusCircle}>
+                  <Ionicons name="add" size={14} style={{ opacity: 0.8, color: "#333" }} />
+                </View>
+                <AppText style={styles.addSectionText}>Voeg menu-item toe</AppText>
+              </TouchableOpacity>
+
+              <SectionItems
+                sections={sections}
+                onPressSection={handlePressSection}
+                activeTasksCountPerSection={activeTasksCountPerSection}
+              />
+            </View>
+
+            {/* Modal voor toevoegen */}
+            {renderAddSectionModal()}
+          </View>
+        ) : null}
+
+        {/* ----------- Rechter Kolom (alleen op tablet) ----------- */}
+        {isTabletLandscape && (
+          <View style={styles.rightColumn}>
+            <AllTasksTabletView />
+          </View>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -330,7 +378,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6f6f6",
+    backgroundColor: "#fafafa",
     paddingHorizontal: 16,
     paddingTop: 25,
   },
@@ -345,29 +393,26 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 10,
   },
-  listContainer: {
-    flex: 1,
-  },
   logo: {
-    width: 35,
-    height: 35,
+    width: 32,
+    height: 32,
     resizeMode: "contain",
   },
   avatarCircle: {
-    width: 35,
-    height: 35,
-    borderRadius: 17.5,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
   },
   avatarText: {
-    color: "#fff",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "bold",
+    color: "#fff",
   },
   avatar: {
-    width: 35,
-    height: 35,
+    width: 32,
+    height: 32,
     resizeMode: "contain",
   },
 
@@ -385,46 +430,89 @@ const styles = StyleSheet.create({
     paddingTop: 30,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 16,
     marginBottom: 12,
     color: "#333",
   },
   input: {
-    backgroundColor: "#f2f2f2",
     padding: 8,
     borderRadius: 6,
     marginBottom: 12,
+    backgroundColor: "#f2f2f2",
+  },
+  label: {
+    marginTop: 10,
+    fontSize: 14,
+    color: "#333",
+  },
+  datePickerButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    marginTop: 4,
+    backgroundColor: "#f2f2f2",
+  },
+  datePickerText: {
+    fontSize: 14,
+    color: "#333",
   },
   saveButton: {
-    backgroundColor: "#6C63FF",
-    padding: 10,
-    borderRadius: 6,
     alignItems: "center",
+    padding: 10,
     marginBottom: 8,
+    borderRadius: 6,
+    backgroundColor: "#6C63FF",
   },
   saveButtonText: {
     color: "#fff",
-    fontWeight: "bold",
+    fontSize: 14,
   },
   cancelButton: { padding: 10, alignItems: "center" },
-  cancelButtonText: { color: "#666", fontWeight: "bold" },
+  cancelButtonText: { color: "#666" },
+
+  listContainer: {
+    // flex: 1,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderWidth: 0.5,
+    borderColor: "rgba(0, 0, 0, 0.1)",
+    backgroundColor: "#ffffff",
+    height: "auto",
+  },
   addSectionButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    paddingLeft: 18,
-    paddingRight: 12,
-    paddingTop: 12,
-    paddingBottom: 12,
-    marginBottom: 8,
+    paddingHorizontal: 10,
+    marginVertical: 6,
+  },
+  plusCircle: {
+    width: 28,
+    height: 28,
+    marginRight: 12,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
   },
   addSectionText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
     color: "#666",
-    opacity: 0.7,
-    fontWeight: "600",
+    opacity: 0.8,
+  },
+  rowLayout: {
+    flexDirection: "row",
+  },
+  
+  leftColumn: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  
+  rightColumn: {
+    flex: 1,
+    paddingLeft: 8,
+    backgroundColor: "#f6f6f6",
   },
 });

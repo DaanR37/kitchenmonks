@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Modal, Pressable, TouchableOpacity, View, Text, StyleSheet } from "react-native";
+import { Modal, Pressable, TouchableOpacity, View, StyleSheet } from "react-native";
 import { Calendar } from "react-native-calendars";
+import AppText from "@/components/AppText";
 
 type CalendarModalProps = {
   visible: boolean;
@@ -37,7 +38,7 @@ export default function CalendarModal({ visible, onClose, selectedDate, onSelect
       <Pressable style={modalStyles.overlay} onPress={onClose}>
         {/* StopPropagation zodat een klik binnen de 'modalContainer' de modal niet sluit */}
         <Pressable style={modalStyles.modalContainer} onPress={(e) => e.stopPropagation()}>
-          <Text style={modalStyles.title}>Selecteer een datum</Text>
+          <AppText style={modalStyles.title}>Selecteer een datum</AppText>
 
           {/* De kalender uit react-native-calendars */}
           <Calendar
@@ -57,11 +58,11 @@ export default function CalendarModal({ visible, onClose, selectedDate, onSelect
           {/* Onderste knoppenrij */}
           <View style={modalStyles.buttonRow}>
             <TouchableOpacity onPress={handleReset} style={modalStyles.resetButton}>
-              <Text style={modalStyles.resetButtonText}>Reset</Text>
+              <AppText style={modalStyles.resetButtonText}>Reset</AppText>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={handleDone} style={modalStyles.doneButton}>
-              <Text style={modalStyles.doneButtonText}>Done</Text>
+              <AppText style={modalStyles.doneButtonText}>Done</AppText>
             </TouchableOpacity>
           </View>
         </Pressable>

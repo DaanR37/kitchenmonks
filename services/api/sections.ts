@@ -7,15 +7,13 @@ import { supabase } from "@/services/supabaseClient";
   - Je zou hier eventueel de filtering op datum kunnen toevoegen (door .lte en .gte te gebruiken),
     maar in dit voorbeeld is dat commentaar (omdat de secties in principe de vaste menukaart zijn).
 */
-export async function fetchSections(kitchenId: string /* date: string */) {
+export async function fetchSections(kitchenId: string, date: string) {
   const { data, error } = await supabase
     .from("sections")
     .select("*, task_templates: task_templates!task_templates_section_id_fkey(*)")
-    .eq("kitchen_id", kitchenId);
-  /* Optioneel: Filter secties op datum, zodat alleen secties getoond worden waarbij de geselecteerde datum 
-    tussen start_date en end_date valt */
-  // .lte("start_date", date)
-  // .gte("end_date", date);
+    .eq("kitchen_id", kitchenId)
+    .lte("start_date", date)
+    .gte("end_date", date);
 
   if (error) throw error;
   return data;
@@ -43,4 +41,40 @@ export async function createSection(kitchenId: string, name: string, startDate: 
 
   if (error) throw error;
   return data;
+}
+
+// Haal één specifieke sectie op (zonder taken)
+export async function fetchSectionById(sectionId: string) {
+  const { data, error } = await supabase.from("sections").select("*").eq("id", sectionId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// Pas de naam aan van een sectie
+export async function updateSectionName(sectionId: string, newName: string) {
+  const { data, error } = await supabase
+    .from("sections")
+    .update({ section_name: newName })
+    .eq("id", sectionId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// Verwijder sectie, maar check eerst of er nog taken aan hangen
+export async function deleteSectionWithCheck(sectionId: string): Promise<"deleted" | "has_tasks"> {
+  const { count, error: countError } = await supabase
+    .from("task_templates")
+    .select("id", { head: true, count: "exact" })
+    .eq("section_id", sectionId);
+  if (countError) throw countError;
+
+  if (count && count > 0) {
+    return "has_tasks";
+  }
+
+  const { error: deleteError } = await supabase.from("sections").delete().eq("id", sectionId);
+  if (deleteError) throw deleteError;
+
+  return "deleted";
 }

@@ -1,6 +1,4 @@
 import { supabase } from "@/services/supabaseClient";
-import React from "react";
-import { View, Text } from "react-native";
 
 /**
  * Haal het percentage “done” op van alle taken in de hele keuken (ongeacht assigned_to).
@@ -10,34 +8,31 @@ import { View, Text } from "react-native";
  */
 export async function fetchAllDonePercentage(date: string): Promise<number> {
   try {
-    /* 1) tel het aantal taken met status=“done” */
+    /* 1) Tel taken met status = "done" of "in progress" */
     const { count: doneCount, error: doneError } = await supabase
       .from("task_instances")
       .select("id", { count: "exact", head: true })
       .eq("date", date)
-      .eq("status", "done");
+      .in("status", ["done", "in progress"]); // ✅ beide tellen als voltooid
+
     if (doneError) throw doneError;
 
-    /* 2) tel het aantal taken met “actieve” status */
-    const { count: activeCount, error: activeError } = await supabase
+    /* 2) Tel totaal aantal actieve taken: "done", "in progress", "active" */
+    const { count: totalCount, error: totalError } = await supabase
       .from("task_instances")
       .select("id", { count: "exact", head: true })
       .eq("date", date)
-      .in("status", ["active", "in progress"]);
-    if (activeError) throw activeError;
+      .in("status", ["done", "in progress", "active"]);
 
-    /* Als doneCount of activeCount ongedefinieerd is, zet ze op 0 */
+    if (totalError) throw totalError;
+
     const done = doneCount ?? 0;
-    const active = activeCount ?? 0;
+    const total = totalCount ?? 0;
 
-    /* voorkomen dat we delen door 0 */
-    if (done + active === 0) {
-      return 0;
-    }
+    if (total === 0) return 0;
 
-    /* bereken het percentage */
-    const percentage = (done / (done + active)) * 100;
-    return Math.round(percentage); /* afronden als integer, of laat het als float */
+    const percentage = (done / total) * 100;
+    return Math.round(percentage);
   } catch (error) {
     console.error("Error fetching all done percentage:", error);
     return 0;
@@ -70,7 +65,7 @@ export async function fetchActiveTasksCount(date: string): Promise<number> {
   const { count, error } = await supabase
     .from("task_instances")
     .select("id", { count: "exact", head: true })
-    .eq("status", "active")
+    .in("status", ["active", "in progress"]) // ✅ meerdere statussen
     .eq("date", date);
 
   if (error) {
@@ -119,25 +114,21 @@ export async function fetchActiveCountPerSection(
     `
     )
     .eq("date", date)
-    .eq("status", "active");
+    .in("status", ["active", "in progress"]);
 
   if (error) throw error;
 
-  // `data` is een array van objects. Elk object heeft ongeveer:
-  // {
-  //   status: 'active',
-  //   task_template: { section_id: '...' }
-  // }
-  // We gaan alles groeperen op section_id en tellen de 'active' instances.
   const activeCounts: Record<string, number> = {};
 
   data.forEach((instance: any) => {
-    const secId = instance.task_template.section_id;
-    if (!activeCounts[secId]) {
-      activeCounts[secId] = 0;
+    const secId = instance.task_template?.section_id;
+    if (secId) {
+      if (!activeCounts[secId]) {
+        activeCounts[secId] = 0;
+      }
+      activeCounts[secId] += 1;
     }
-    activeCounts[secId] += 1;
   });
-  console.log("activeCounts", activeCounts);
+
   return activeCounts;
 }

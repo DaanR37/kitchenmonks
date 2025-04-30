@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useContext } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   FlatList,
   Modal,
   Pressable,
-  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
@@ -23,6 +21,7 @@ import {
 } from "@/services/api/taskInstances";
 import { fetchProfiles } from "@/services/api/profiles";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import AppText from "@/components/AppText";
 
 export type TaskRow = {
   id: string;
@@ -70,12 +69,8 @@ export default function OutOfStockScreen() {
   const router = useRouter();
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
-  const { activeProfile } = useContext(ProfileContext);
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [addTaskModalVisible, setAddTaskModalVisible] = useState(false);
-  const [addTaskSectionId, setAddTaskSectionId] = useState<string | null>(null);
-  const [newTaskName, setNewTaskName] = useState("");
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
@@ -105,7 +100,7 @@ export default function OutOfStockScreen() {
   async function loadData() {
     setLoading(true);
     const kitchenId = user!.user_metadata.kitchen_id;
-    const secs = await fetchSections(kitchenId);
+    const secs = await fetchSections(kitchenId, selectedDate);
     const mapped = await Promise.all(
       secs.map(async (sec) => {
         const tasks = await getTasksForSectionOnDate(sec.id, selectedDate);
@@ -309,7 +304,7 @@ export default function OutOfStockScreen() {
               onPress={() => handleToggleAssignTask(profile.id)}
               key={profile.id}
             >
-              <Text style={styles.profileBubbleText}>{initials}</Text>
+              <AppText style={styles.profileBubbleText}>{initials}</AppText>
             </TouchableOpacity>
           );
         }}
@@ -330,15 +325,15 @@ export default function OutOfStockScreen() {
         <Pressable style={styles.modalOverlay} onPress={closeTaskDetailsModal}>
           <Pressable style={styles.bottomModalContainer} onPress={(e) => e.stopPropagation()}>
             {/* Taaknaam */}
-            <Text style={styles.modalTaskTitle}>{cleanTaskName(selectedTask.task_name)}</Text>
-            <Text style={styles.assignTitle}>Assign to:</Text>
+            <AppText style={styles.modalTaskTitle}>{cleanTaskName(selectedTask.task_name)}</AppText>
+            <AppText style={styles.assignTitle}>Assign to:</AppText>
 
             {/* Horizontale slider met profielen */}
             {renderProfileBubbles()}
 
             {/* Status-keuzes in 3x3 layout, etc. */}
             <View style={styles.statusGridContainer}>
-              <Text style={styles.statusGridTitle}>Status</Text>
+              <AppText style={styles.statusGridTitle}>Status</AppText>
 
               {/* Rij 1: Done / In progress */}
               <View style={styles.statusGridRow}>
@@ -360,7 +355,7 @@ export default function OutOfStockScreen() {
                   </View>
 
                   {/* Tekst in de ovale knop */}
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "done" && { color: "#000", fontWeight: "bold" },
@@ -368,7 +363,7 @@ export default function OutOfStockScreen() {
                     ]}
                   >
                     Done
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
 
                 {/* In progress */}
@@ -386,7 +381,7 @@ export default function OutOfStockScreen() {
                       selectedTask.status !== "in progress" && { opacity: 0.5 },
                     ]}
                   />
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "in progress" && { color: "#000", fontWeight: "bold" },
@@ -394,7 +389,7 @@ export default function OutOfStockScreen() {
                     ]}
                   >
                     In progress
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               </View>
 
@@ -415,14 +410,14 @@ export default function OutOfStockScreen() {
                     {/* voorbeeld van icoontje */}
                     <Ionicons name="alert" size={14} color="#fff" />
                   </View>
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "active" && { color: "#000", fontWeight: "bold" },
                     ]}
                   >
                     Active
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
 
                 {/* Out of Stock */}
@@ -436,14 +431,14 @@ export default function OutOfStockScreen() {
                   <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
                     <Ionicons name="create" size={14} color="#fff" />
                   </View>
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "out of stock" && { color: "#000", fontWeight: "bold" },
                     ]}
                   >
                     Out of Stock
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               </View>
 
@@ -464,14 +459,14 @@ export default function OutOfStockScreen() {
                     {/* voorbeeld van icoontje */}
                     <Ionicons name="alert" size={14} color="#fff" />
                   </View>
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "inactive" && { color: "#000", fontWeight: "bold" },
                     ]}
                   >
                     Inactive
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
 
                 {/* Edit */}
@@ -479,7 +474,7 @@ export default function OutOfStockScreen() {
                   <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
                     <Ionicons name="create" size={14} color="#fff" />
                   </View>
-                  <Text style={styles.statusOvalLabel}>Edit</Text>
+                  <AppText style={styles.statusOvalLabel}>Edit</AppText>
                 </TouchableOpacity>
               </View>
             </View>
@@ -492,19 +487,22 @@ export default function OutOfStockScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading my tasks for {selectedDate}...</Text>
+        <AppText>Loading my tasks for {selectedDate}...</AppText>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header met een terugknop bijvoorbeeld */}
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>{"<"} Out of stock</Text>
-        </TouchableOpacity>
+        <AppText style={styles.headerText}>Out of Stock</AppText>
       </View>
+
+      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <Ionicons name="chevron-back" size={14} color="#000" />
+        <AppText style={styles.backText}>Back</AppText>
+      </TouchableOpacity>
 
       {/* FlatList met secties en hun taken (gefilterd op activeProfile) */}
       <FlatList
@@ -512,7 +510,7 @@ export default function OutOfStockScreen() {
         keyExtractor={(sec) => sec.id}
         renderItem={({ item: sec }) => (
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>{sec.section_name}</Text>
+            <AppText style={styles.sectionTitle}>{sec.section_name}</AppText>
 
             {sec.tasks.map((task) => {
               const meta = STATUS_META[task.status] || {
@@ -537,14 +535,14 @@ export default function OutOfStockScreen() {
 
                   {/* 2) Resterende (taak)rij opent modal */}
                   <Pressable style={styles.taskTextContainer} onPress={() => openTaskDetailsModal(task)}>
-                    <Text
+                    <AppText
                       style={[
                         styles.taskText,
                         task.status === "done" ? styles.doneText : styles.inactiveText,
                       ]}
                     >
                       {cleanTaskName(task.task_name)}
-                    </Text>
+                    </AppText>
                   </Pressable>
 
                   {/* ③ kleine assigned‑thumbnails */}
@@ -556,7 +554,7 @@ export default function OutOfStockScreen() {
                       const bg = getColorFromId(prof.id);
                       return (
                         <View key={pid} style={[styles.bubbleSmall, { backgroundColor: bg }]}>
-                          <Text style={styles.bubbleSmallText}>{initials}</Text>
+                          <AppText style={styles.bubbleSmallText}>{initials}</AppText>
                         </View>
                       );
                     })}
@@ -577,8 +575,10 @@ export default function OutOfStockScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f6f6f6", paddingTop: 40 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 8 },
-  backText: { color: "#666", fontSize: 16 },
+  header: { alignItems: "center", marginBottom: 8 },
+  headerText: { fontSize: 18, fontWeight: "bold" },
+  backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 12 },
+  backText: { fontSize: 17, color: "#666", marginLeft: 4 },
 
   // -- De secties op het hoofdscherm --
   sectionContainer: {

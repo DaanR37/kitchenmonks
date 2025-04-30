@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useContext } from "react";
 import {
   View,
-  Text,
   TouchableOpacity,
   FlatList,
   StyleSheet,
@@ -16,6 +15,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { createProfile, fetchProfiles, updateProfile, deleteProfile } from "@/services/api/profiles";
 import { ProfileContext, ProfileData } from "@/services/ProfileContext";
 import { supabase } from "@/services/supabaseClient";
+import AppText from "@/components/AppText";
 
 /* Functie om de initialen van een profiel te genereren */
 // const generateInitials = (firstName: string, lastName: string): string => {
@@ -183,9 +183,9 @@ export default function ChooseProfileScreen() {
       <View style={styles.profileRow}>
         <TouchableOpacity style={styles.profileItem} onPress={() => handleSelectProfile(item)}>
           <View style={[styles.initialsCircle, { backgroundColor: thumbnailColor }]}>
-            <Text style={styles.initialsText}>{initials}</Text>
+            <AppText style={styles.initialsText}>{initials}</AppText>
           </View>
-          <Text style={styles.profileName}>{fullName}</Text>
+          <AppText style={styles.profileName}>{fullName}</AppText>
         </TouchableOpacity>
 
         {/* Drie puntjes-knop rechts (kebab menu) */}
@@ -207,7 +207,7 @@ export default function ChooseProfileScreen() {
         {/* Buitenste laag die de achtergrond dimt */}
         <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
           <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Nieuw profiel</Text>
+            <AppText style={styles.modalTitle}>Nieuw profiel</AppText>
             <TextInput
               style={styles.input}
               placeholder="Voornaam"
@@ -223,10 +223,10 @@ export default function ChooseProfileScreen() {
               autoCorrect={false}
             />
             <TouchableOpacity style={styles.saveButton} onPress={handleCreateProfile}>
-              <Text style={styles.saveButtonText}>Opslaan</Text>
+              <AppText style={styles.saveButtonText}>Opslaan</AppText>
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
-              <Text style={styles.cancelButtonText}>Annuleren</Text>
+              <AppText style={styles.cancelButtonText}>Annuleren</AppText>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -245,7 +245,7 @@ export default function ChooseProfileScreen() {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowEditModal(false)}>
           <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Profiel bewerken</Text>
+            <AppText style={styles.modalTitle}>Profiel bewerken</AppText>
             <TextInput
               style={styles.input}
               placeholder="Voornaam"
@@ -261,15 +261,15 @@ export default function ChooseProfileScreen() {
               autoCorrect={false}
             />
             <TouchableOpacity style={styles.saveButton} onPress={handleSaveEditProfile}>
-              <Text style={styles.saveButtonText}>Opslaan</Text>
+              <AppText style={styles.saveButtonText}>Opslaan</AppText>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.deleteButton, { marginTop: 12 }]} onPress={handleDeleteProfile}>
-              <Text style={styles.deleteButtonText}>Verwijderen</Text>
+              <AppText style={styles.deleteButtonText}>Verwijderen</AppText>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.cancelButton} onPress={() => setShowEditModal(false)}>
-              <Text style={styles.cancelButtonText}>Annuleren</Text>
+              <AppText style={styles.cancelButtonText}>Annuleren</AppText>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -280,7 +280,7 @@ export default function ChooseProfileScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading profiles...</Text>
+        <AppText>Loading profiles...</AppText>
       </View>
     );
   }
@@ -297,19 +297,19 @@ export default function ChooseProfileScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => router.replace("/auth")}>
             <Ionicons name="chevron-back" size={14} color="#666" />
           </TouchableOpacity>
-          <Text style={styles.title}>Terug naar login</Text>
+          <AppText style={styles.title}>Terug naar login</AppText>
         </View>
 
         <FlatList
           data={profiles}
           keyExtractor={(item) => item.id}
           renderItem={renderProfileItem}
-          ListEmptyComponent={() => <Text style={styles.emptyText}>Geen profielen gevonden.</Text>}
+          ListEmptyComponent={() => <AppText style={styles.emptyText}>Geen profielen gevonden.</AppText>}
           keyboardShouldPersistTaps="always"
           contentContainerStyle={{ paddingBottom: 120, paddingTop: 30 }}
           ListHeaderComponent={
             <TouchableOpacity style={styles.addProfileButton} onPress={() => setShowAddModal(true)}>
-              <Text style={styles.addProfileText}>+  Voeg kok toe</Text>
+              <AppText style={styles.addProfileText}>+  Voeg kok toe</AppText>
             </TouchableOpacity>
           }
         />

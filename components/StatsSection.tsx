@@ -1,7 +1,8 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import AppText from "@/components/AppText";
 
 type StatsSectionProps = {
   allPercentage: number;
@@ -26,23 +27,23 @@ export default function StatsSection({
         <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/allTasks")}>
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#0066ff" }]}>
-              <Ionicons name="layers-outline" size={16} color="#fff" />
+              <Ionicons name="layers-outline" size={14} color="#fff" />
             </View>
-            <Text style={styles.statLabel}>All</Text>
+            <AppText style={styles.statLabel}>All</AppText>
           </View>
           {/* Toon percentage voltooide taken */}
-          <Text style={styles.statValue}>{allPercentage}%</Text>
+          <AppText style={styles.statValue}>{allPercentage}%</AppText>
         </TouchableOpacity>
 
         {/* Team MEP */}
         <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/teamMep")}>
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#00bb06" }]}>
-              <Ionicons name="people-outline" size={16} color="#fff" />
+              <Ionicons name="people-outline" size={14} color="#fff" />
             </View>
-            <Text style={styles.statLabel}>Team MEP</Text>
+            <AppText style={styles.statLabel}>Team MEP</AppText>
           </View>
-          <Text style={styles.statValue}>{teamMepCount}</Text>
+          <AppText style={styles.statValue}>{teamMepCount}</AppText>
         </TouchableOpacity>
       </View>
 
@@ -52,23 +53,23 @@ export default function StatsSection({
         <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/myMep")}>
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#ff9000" }]}>
-              <Ionicons name="person-outline" size={16} color="#fff" />
+              <Ionicons name="person-outline" size={14} color="#fff" />
             </View>
-            <Text style={styles.statLabel}>My MEP</Text>
+            <AppText style={styles.statLabel}>My MEP</AppText>
           </View>
-          <Text style={styles.statValue}>{myMepCount}</Text>
+          <AppText style={styles.statValue}>{myMepCount}</AppText>
         </TouchableOpacity>
 
         {/* Out of stock */}
         <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/outOfStock")}>
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#FF6347" }]}>
-              <Ionicons name="cart-outline" size={16} color="#fff" />
+              <Ionicons name="cart-outline" size={14} color="#fff" />
             </View>
-            <Text style={styles.statLabel}>Out of stock</Text>
+            <AppText style={styles.statLabel}>Out of stock</AppText>
           </View>
           {/* Toon aantal out of stock taken */}
-          <Text style={styles.statValue}>{outOfStockCount}</Text>
+          <AppText style={styles.statValue}>{outOfStockCount}</AppText>
         </TouchableOpacity>
       </View>
     </View>
@@ -77,7 +78,7 @@ export default function StatsSection({
 
 const styles = StyleSheet.create({
   statsContainer: {
-    marginVertical: 12,
+    marginVertical: 18,
   },
   statsRow: {
     flexDirection: "row",
@@ -85,39 +86,35 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   statBox: {
-    width: "48%",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 12,
     flexDirection: "row",
     justifyContent: "space-between",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    width: "48%",
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 0.5,
+    borderColor: "rgba(0, 0, 0, 0.1)",
+    backgroundColor: "#ffffff",
   },
   statLeft: {
     flexDirection: "column",
   },
   circle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginBottom: 6,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginBottom: 7,
     alignItems: "center",
     justifyContent: "center",
   },
   statLabel: {
-    fontSize: 16,
+    // marginTop: 2,
+    // marginBottom: 0,
+    fontSize: 14,
     fontWeight: "500",
-    marginTop: 2,
-    marginBottom: 0,
     color: "#333",
   },
   statValue: {
     fontSize: 24,
-    fontWeight: "700",
     color: "#333",
   },
 });

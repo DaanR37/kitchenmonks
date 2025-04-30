@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useContext } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  FlatList,
-  TextInput,
-  Pressable,
-} from "react-native";
+import { View, StyleSheet, TouchableOpacity, Modal, FlatList, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
@@ -20,11 +11,10 @@ import {
   updateTaskInstanceDone,
   updateTaskInstanceStatus,
   assignTaskInstance,
-  createTaskInstance,
 } from "@/services/api/taskInstances";
-import { createTaskTemplate } from "@/services/api/taskTemplates";
 import { fetchProfiles } from "@/services/api/profiles";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
+import AppText from "@/components/AppText";
 
 export type TaskRow = {
   id: string;
@@ -72,9 +62,6 @@ export default function AllTasksScreen() {
   const { selectedDate } = useContext(DateContext);
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [addTaskModalVisible, setAddTaskModalVisible] = useState(false);
-  const [addTaskSectionId, setAddTaskSectionId] = useState<string | null>(null);
-  const [newTaskName, setNewTaskName] = useState("");
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
@@ -107,65 +94,12 @@ export default function AllTasksScreen() {
     loadData(kitchenId);
   }, [user, selectedDate]);
 
-  /* Data Fetch: Alle taken uit de hele keuken met status in progress of done */
-  // async function loadData() {
-  //   if (!user) return;
-  //   const kitchenId = user.user_metadata?.kitchen_id;
-  //   if (!kitchenId) return;
-
-  //   setLoading(true);
-  //   try {
-  //     // 1) Haal alle secties op (zonder datumfilter).
-  //     const secs = await fetchSections(kitchenId);
-
-  //     // 2) Voor elke sectie: haal ALLE taken (instances) op voor de selectedDate.
-  //     //    Filter ze daarna zodanig dat alleen tasks met "in progress" of "done" overblijven.
-  //     const merged: SectionData[] = await Promise.all(
-  //       secs.map(async (sec: any) => {
-  //         const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
-
-  //         // Filter: we laten alleen taken zien die "in progress" of "done" zijn.
-  //         const filteredTasks = allTasks.filter(
-  //           (task: TaskRow) => task.status === "in progress" || task.status === "done"
-  //         );
-
-  //         // Voeg de sectie-data toe aan elk task-object.
-  //         const tasksWithSection = filteredTasks.map((t: any) => ({
-  //           ...t,
-  //           section: {
-  //             id: sec.id,
-  //             section_name: sec.section_name,
-  //             start_date: sec.start_date,
-  //             end_date: sec.end_date,
-  //           },
-  //         }));
-
-  //         return {
-  //           id: sec.id,
-  //           section_name: sec.section_name,
-  //           start_date: sec.start_date,
-  //           end_date: sec.end_date,
-  //           tasks: tasksWithSection,
-  //         };
-  //       })
-  //     );
-
-  //     // Filter secties zonder taken (optioneel)
-  //     const sectionsWithTasks = merged.filter((s) => s.tasks.length > 0);
-  //     setSections(sectionsWithTasks);
-  //   } catch (error) {
-  //     console.log("Error loading all tasks (in progress/done):", error);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // }
-
   /* 2) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
   async function loadData(kitchenId: string) {
     setLoading(true);
     try {
       // a) alle secties ophalen
-      const secs = await fetchSections(kitchenId);
+      const secs = await fetchSections(kitchenId, selectedDate);
 
       // b) voor elke sectie: haal *alle* task‑instances op voor de selectedDate
       const merged: SectionData[] = await Promise.all(
@@ -201,140 +135,6 @@ export default function AllTasksScreen() {
       setLoading(false);
     }
   }
-
-  async function handleCreateTask() {
-    /* Controleer of er een sectie is geselecteerd en dat er een taaknaam is ingevoerd */
-    if (!addTaskSectionId || !newTaskName.trim()) return;
-    try {
-      /* Zoek de oudersectie op in de lokale state, zodat we de start- en einddatum ervan hebben */
-      const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
-      if (!sectionObj) {
-        console.log("Geen section data gevonden voor addTaskSectionId:", addTaskSectionId);
-        return;
-      }
-
-      /* Maak altijd een nieuwe task template aan. We voegen een timestamp toe voor uniciteit,
-      maar nu gebruiken we de start_date en end_date van de sectie als de geldigheidsperiode */
-      const newTemplate = await createTaskTemplate(
-        addTaskSectionId,
-        newTaskName + " " + new Date().getTime(),
-        sectionObj.start_date, // Gebruik de parent start datum
-        sectionObj.end_date // Gebruik de parent eind datum
-      );
-
-      const templateId = newTemplate.id; /* Verkrijg de nieuwe task_template_id */
-
-      /*  Maak een nieuwe task instance aan voor de geselecteerde datum.
-      De task instance krijgt zijn datum (bijv. "Today" of de geselecteerde dag) */
-      const newTask = await createTaskInstance(templateId, selectedDate);
-      newTask.task_name = newTaskName;
-      newTask.assigned_to = []; /* Begin met een lege array */
-
-      /* Voeg de sectiegegevens toe aan de nieuwe taak, zodat we bijvoorbeeld later in de modal de parent-informatie kunnen tonen */
-      newTask.section = { id: sectionObj.id, section_name: sectionObj.section_name };
-
-      // const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
-      // if (sectionObj) {
-      //   /* Voeg alle relevante sectiegegevens toe */
-      //   newTask.section = { id: sectionObj.id, section_name: sectionObj.section_name };
-      // } else {
-      //   /* Als er geen section in de lokale state gevonden wordt, log dit voor debugging */
-      //   console.log("Warning: Geen section data gevonden voor addTaskSectionId:", addTaskSectionId);
-      // }
-
-      /* Update de lokale state door de nieuwe taak toe te voegen aan de taken van de juiste sectie */
-      const updatedSections = sections.map((sec) => {
-        if (sec.id === addTaskSectionId) {
-          return { ...sec, tasks: [...sec.tasks, newTask] };
-        }
-        return sec;
-      });
-      setSections(updatedSections);
-    } catch (error) {
-      console.log("Error creating task:", error);
-    } finally {
-      closeAddTaskModal();
-    }
-  }
-
-  /* Handle the toggle of task assignments */
-  // async function handleToggleAssignTask(profileId: string) {
-  //   if (!selectedTask) return;
-  //   if (!selectedTask.section) {
-  //     console.log("Selected task mist section data.");
-  //     return;
-  //   }
-
-  //   let currentAssignments: string[] = selectedTask.assigned_to ? [...selectedTask.assigned_to] : [];
-  //   const isAssigned = currentAssignments.includes(profileId);
-  //   if (isAssigned) {
-  //     // Verwijder het profiel als het al is toegewezen
-  //     currentAssignments = currentAssignments.filter((id) => id !== profileId);
-  //   } else {
-  //     // Voeg het profiel toe als het nog niet is toegewezen
-  //     currentAssignments.push(profileId);
-  //   }
-  //   // Als er ten minste één profiel is toegewezen, moet de taak 'active' zijn, anders 'inactive'
-  //   const newStatus = currentAssignments.length > 0 ? "active" : "inactive";
-  //   try {
-  //     await assignTaskInstance(selectedTask.id, currentAssignments);
-  //     await updateTaskInstanceStatus(selectedTask.id, newStatus);
-  //     // Werk lokale state bij voor zowel de secties als de geselecteerde taak
-  //     const updatedSections = sections.map((sec) => {
-  //       if (sec.id !== selectedTask.section.id) return sec;
-  //       return {
-  //         ...sec,
-  //         tasks: sec.tasks.map((t) =>
-  //           t.id === selectedTask.id ? { ...t, assigned_to: currentAssignments, status: newStatus } : t
-  //         ),
-  //       };
-  //     });
-  //     setSections(updatedSections);
-  //     setSelectedTask({ ...selectedTask, assigned_to: currentAssignments, status: newStatus });
-  //   } catch (error) {
-  //     console.log("Error updating assignment/status:", error);
-  //   }
-  // }
-  /* Zet de taak op "in progress" */
-  // async function handleSetInProgress() {
-  //   if (!selectedTask) return;
-  //   try {
-  //     await updateTaskInstanceInProgress(selectedTask.id);
-
-  //     const updatedSections = sections.map((sec) => {
-  //       if (sec.id !== selectedTask.section.id) return sec;
-  //       return {
-  //         ...sec,
-  //         tasks: sec.tasks.map((t) => (t.id === selectedTask.id ? { ...t, status: "in progress" } : t)),
-  //       };
-  //     });
-  //     setSections(updatedSections);
-
-  //     setSelectedTask({ ...selectedTask, status: "in progress" });
-  //   } catch (error) {
-  //     console.log("Error setting in progress:", error);
-  //   }
-  // }
-  /* Zet de taak op "done" */
-  // async function handleSetDone() {
-  //   if (!selectedTask) return;
-  //   try {
-  //     await updateTaskInstanceDone(selectedTask.id);
-
-  //     const updatedSections = sections.map((sec) => {
-  //       if (sec.id !== selectedTask.section.id) return sec;
-  //       return {
-  //         ...sec,
-  //         tasks: sec.tasks.map((t) => (t.id === selectedTask.id ? { ...t, status: "done" } : t)),
-  //       };
-  //     });
-  //     setSections(updatedSections);
-
-  //     setSelectedTask({ ...selectedTask, status: "done" });
-  //   } catch (error) {
-  //     console.log("Error setting done:", error);
-  //   }
-  // }
 
   /* 3) Handlers voor in‑progress / done / assign / etc. (zelfde als voor MyTasks) */
   async function handleToggleAssignTask(profileId: string) {
@@ -434,18 +234,6 @@ export default function AllTasksScreen() {
     );
   }
 
-  /* Handlers voor de "Nieuwe taak" modal */
-  function openAddTaskModal(sectionId: string) {
-    setAddTaskSectionId(sectionId);
-    setNewTaskName("");
-    setAddTaskModalVisible(true);
-  }
-  function closeAddTaskModal() {
-    setAddTaskSectionId(null);
-    setNewTaskName("");
-    setAddTaskModalVisible(false);
-  }
-
   /* Handlers voor de taak details modal */
   function openTaskDetailsModal(task: TaskRow) {
     setSelectedTask(task);
@@ -524,7 +312,7 @@ export default function AllTasksScreen() {
               onPress={() => handleToggleAssignTask(profile.id)}
               key={profile.id}
             >
-              <Text style={styles.profileBubbleText}>{initials}</Text>
+              <AppText style={styles.profileBubbleText}>{initials}</AppText>
             </TouchableOpacity>
           );
         }}
@@ -545,15 +333,15 @@ export default function AllTasksScreen() {
         <Pressable style={styles.modalOverlay} onPress={closeTaskDetailsModal}>
           <Pressable style={styles.bottomModalContainer} onPress={(e) => e.stopPropagation()}>
             {/* Taaknaam */}
-            <Text style={styles.modalTaskTitle}>{cleanTaskName(selectedTask.task_name)}</Text>
-            <Text style={styles.assignTitle}>Assign to:</Text>
+            <AppText style={styles.modalTaskTitle}>{cleanTaskName(selectedTask.task_name)}</AppText>
+            <AppText style={styles.assignTitle}>Assign to:</AppText>
 
             {/* Horizontale slider met profielen */}
             {renderProfileBubbles()}
 
             {/* Status-keuzes in 3x3 layout, etc. */}
             <View style={styles.statusGridContainer}>
-              <Text style={styles.statusGridTitle}>Status</Text>
+              <AppText style={styles.statusGridTitle}>Status</AppText>
 
               {/* Rij 1: Done / In progress */}
               <View style={styles.statusGridRow}>
@@ -575,7 +363,7 @@ export default function AllTasksScreen() {
                   </View>
 
                   {/* Tekst in de ovale knop */}
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "done" && { color: "#000", fontWeight: "bold" },
@@ -583,7 +371,7 @@ export default function AllTasksScreen() {
                     ]}
                   >
                     Done
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
 
                 {/* In progress */}
@@ -601,7 +389,7 @@ export default function AllTasksScreen() {
                       selectedTask.status !== "in progress" && { opacity: 0.5 },
                     ]}
                   />
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "in progress" && { color: "#000", fontWeight: "bold" },
@@ -609,7 +397,7 @@ export default function AllTasksScreen() {
                     ]}
                   >
                     In progress
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               </View>
 
@@ -630,14 +418,14 @@ export default function AllTasksScreen() {
                     {/* voorbeeld van icoontje */}
                     <Ionicons name="alert" size={14} color="#fff" />
                   </View>
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "active" && { color: "#000", fontWeight: "bold" },
                     ]}
                   >
                     Active
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
 
                 {/* Out of Stock */}
@@ -651,14 +439,14 @@ export default function AllTasksScreen() {
                   <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
                     <Ionicons name="create" size={14} color="#fff" />
                   </View>
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "out of stock" && { color: "#000", fontWeight: "bold" },
                     ]}
                   >
                     Out of Stock
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               </View>
 
@@ -679,14 +467,14 @@ export default function AllTasksScreen() {
                     {/* voorbeeld van icoontje */}
                     <Ionicons name="alert" size={14} color="#fff" />
                   </View>
-                  <Text
+                  <AppText
                     style={[
                       styles.statusOvalLabel,
                       selectedTask.status === "inactive" && { color: "#000", fontWeight: "bold" },
                     ]}
                   >
                     Inactive
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
 
                 {/* Edit */}
@@ -694,7 +482,7 @@ export default function AllTasksScreen() {
                   <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
                     <Ionicons name="create" size={14} color="#fff" />
                   </View>
-                  <Text style={styles.statusOvalLabel}>Edit</Text>
+                  <AppText style={styles.statusOvalLabel}>Edit</AppText>
                 </TouchableOpacity>
               </View>
             </View>
@@ -707,7 +495,7 @@ export default function AllTasksScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading my tasks for {selectedDate}...</Text>
+        <AppText>Loading my tasks for {selectedDate}...</AppText>
       </View>
     );
   }
@@ -716,10 +504,13 @@ export default function AllTasksScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>{"<"} All tasks</Text>
-        </TouchableOpacity>
+        <AppText style={styles.headerText}>All</AppText>
       </View>
+
+      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <Ionicons name="chevron-back" size={14} color="#000" />
+        <AppText style={styles.backText}>Back</AppText>
+      </TouchableOpacity>
 
       {/* FlatList met secties en taken (gefilterd op done/in progress) */}
       <FlatList
@@ -727,13 +518,19 @@ export default function AllTasksScreen() {
         keyExtractor={(sec) => sec.id}
         renderItem={({ item: sec }) => (
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>{sec.section_name}</Text>
+            <AppText style={styles.sectionTitle}>{sec.section_name}</AppText>
 
             {sec.tasks.map((task) => {
               const meta = STATUS_META[task.status] || {
                 backgroundColor: "transparent",
                 borderColor: "#ccc",
               };
+
+              // const isDone = task.status === "done";
+              // const isInProgress = task.status === "in progress";
+              // const isActive = task.status === "active";
+              // const isOutOfStock = task.status === "out of stock";
+              // const isInactive = task.status === "inactive";
 
               return (
                 <View key={task.id} style={styles.taskItemRow}>
@@ -752,34 +549,26 @@ export default function AllTasksScreen() {
 
                   {/* 2) Resterende (taak)rij opent modal */}
                   <Pressable style={styles.taskTextContainer} onPress={() => openTaskDetailsModal(task)}>
-                    <Text
+                    <AppText
                       style={[
                         styles.taskText,
                         task.status === "done" ? styles.doneText : styles.inactiveText,
                       ]}
                     >
                       {cleanTaskName(task.task_name)}
-                    </Text>
+                    </AppText>
                   </Pressable>
 
-                  {/* ③ kleine assigned‑thumbnails */}
+                  {/* 3) kleine assigned‑thumbnails */}
                   <View style={styles.assignedBubbles}>
                     {task.assigned_to?.map((pid) => {
                       const prof = allProfiles.find((p) => p.id === pid);
                       if (!prof) return null;
-                      const initials = generateInitials(
-                        prof.first_name,
-                        prof.last_name
-                      );
+                      const initials = generateInitials(prof.first_name, prof.last_name);
                       const bg = getColorFromId(prof.id);
                       return (
-                        <View
-                          key={pid}
-                          style={[styles.bubbleSmall, { backgroundColor: bg }]}
-                        >
-                          <Text style={styles.bubbleSmallText}>
-                            {initials}
-                          </Text>
+                        <View key={pid} style={[styles.bubbleSmall, { backgroundColor: bg }]}>
+                          <AppText style={styles.bubbleSmallText}>{initials}</AppText>
                         </View>
                       );
                     })}
@@ -787,40 +576,9 @@ export default function AllTasksScreen() {
                 </View>
               );
             })}
-            {/* Button om een nieuwe taak toe te voegen aan de sectie */}
-            <TouchableOpacity style={styles.addTaskButton} onPress={() => openAddTaskModal(sec.id)}>
-              <Text style={styles.addTaskText}>+ Voeg taak toe</Text>
-            </TouchableOpacity>
           </View>
         )}
       />
-
-      {/* Modal voor het toevoegen van een nieuwe taak */}
-      <Modal
-        visible={addTaskModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeAddTaskModal}
-      >
-        <Pressable style={styles.modalOverlay} onPress={closeAddTaskModal}>
-          {/* Stop propagatie zodat klikken binnen de modal de modal niet sluit */}
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Nieuwe taak</Text>
-            <TextInput
-              style={styles.input}
-              value={newTaskName}
-              onChangeText={setNewTaskName}
-              placeholder="Naam van de taak"
-            />
-            <TouchableOpacity style={styles.saveButton} onPress={handleCreateTask}>
-              <Text style={styles.saveButtonText}>Opslaan</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={closeAddTaskModal}>
-              <Text style={styles.cancelButtonText}>Annuleren</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       {/* --- Modal: Taakdetails --- */}
       {renderAllTasksModal()}
@@ -831,8 +589,10 @@ export default function AllTasksScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f6f6f6", paddingTop: 40 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 8 },
-  backText: { color: "#666", fontSize: 16 },
+  header: { alignItems: "center", marginBottom: 8 },
+  headerText: { fontSize: 18, fontWeight: "bold" },
+  backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 12 },
+  backText: { fontSize: 17, color: "#666", marginLeft: 4 },
 
   // -- De secties op het hoofdscherm --
   sectionContainer: {

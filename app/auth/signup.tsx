@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   View,
-  Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
 } from "react-native";
 import { supabase } from "@/services/supabaseClient";
 import { useRouter } from "expo-router";
+import AppText from "@/components/AppText";
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -63,11 +63,11 @@ export default function SignupScreen() {
           {/* Logo KM hier */}
           <View style={styles.logoContainer}>
             <Image source={require("../../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
-            <Text style={styles.title}>KITCHENMONKS</Text>
+            <AppText style={styles.title}>KITCHENMONKS</AppText>
           </View>
 
           <View style={styles.buttonContainer}>
-            <Text style={styles.subtitle}>Welcome to KitchenMonks - Let's create your account</Text>
+            <AppText style={styles.subtitle}>Welcome to KitchenMonks - Let's create your account</AppText>
             <View style={styles.inputContainer}>
               <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
               <TextInput
@@ -94,12 +94,9 @@ export default function SignupScreen() {
             </View>
 
             <TouchableOpacity style={styles.button} onPress={handleSignup}>
-              <Text style={styles.buttonText}>Sign Up</Text>
+              <AppText style={styles.buttonText}>Sign Up</AppText>
             </TouchableOpacity>
           </View>
-          {/* <TouchableOpacity onPress={() => router.push("/auth")}>
-        <Text style={styles.backText}>Terug</Text>
-      </TouchableOpacity> */}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -1,7 +1,7 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
+import { View, StyleSheet, TouchableOpacity, Image } from "react-native";
 import { useRouter } from "expo-router";
-
+import AppText from "@/components/AppText";
 export default function AuthChooseScreen() {
   const router = useRouter();
 
@@ -10,14 +10,14 @@ export default function AuthChooseScreen() {
       {/* Logo KM hier */}
       <View style={styles.logoContainer}>
         <Image source={require("../../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
-        <Text style={styles.title}>KITCHENMONKS</Text>
+        <AppText style={styles.title}>KITCHENMONKS</AppText>
       </View>
 
       {/* Knop voor login */}
       <View style={styles.buttonContainer}>
-        <Text style={styles.subtitle}>Welcome to KitchenMonks - Let's create your account</Text>
+        <AppText style={styles.subtitle}>Welcome to KitchenMonks - Let's create your account</AppText>
         <TouchableOpacity style={styles.button} onPress={() => router.push("/auth/login")}>
-          <Text style={styles.buttonText}>Log in</Text>
+          <AppText style={styles.buttonText}>Log in</AppText>
         </TouchableOpacity>
 
         {/* Knop voor signup */}
@@ -25,7 +25,7 @@ export default function AuthChooseScreen() {
           style={[styles.button, styles.signupButton]}
           onPress={() => router.push("/auth/signup")}
         >
-          <Text style={[styles.buttonText, { color: "#000" }]}>Sign up</Text>
+          <AppText style={[styles.buttonText, { color: "#000" }]}>Sign up</AppText>
         </TouchableOpacity>
       </View>
     </View>

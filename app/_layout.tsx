@@ -8,7 +8,11 @@ export default function RootLayout() {
     <AuthProvider>
       <ProfileProvider>
         <DateProvider>
-          <Stack />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+            }}
+          />
         </DateProvider>
       </ProfileProvider>
     </AuthProvider>

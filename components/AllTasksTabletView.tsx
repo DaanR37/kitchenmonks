@@ -1,18 +1,11 @@
 import React, { useState, useEffect, useContext } from "react";
-import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  FlatList,
-  Pressable,
-} from "react-native";
+import { View, StyleSheet, TouchableOpacity, Modal, FlatList, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
-import { ProfileContext, ProfileData } from "@/services/ProfileContext";
+import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers"; /* Haal de dag-specifieke taken voor een sectie op, door de logica in taskHelpers te gebruiken */
+import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import {
   updateTaskInstanceInProgress,
   updateTaskInstanceDone,
@@ -28,11 +21,9 @@ export type TaskRow = {
   task_name: string;
   status: string;
   date: string;
-  /* Voor toewijzing gebruiken we een array met profile IDs */
   assigned_to?: string[];
   task_template_id: string;
   section_id: string;
-  /* Deze property wordt toegevoegd zodat we later de parent sectie informatie in de modal kunnen tonen */
   section: {
     id: string;
     section_name: string;
@@ -65,11 +56,10 @@ const STATUS_META: Record<string, StatusMeta> = {
   edit: { backgroundColor: "#000", icon: "create" },
 };
 
-export default function MyMepScreen() {
+export default function AllTasksTabletView() {
   const router = useRouter();
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
-  const { activeProfile } = useContext(ProfileContext);
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -92,38 +82,32 @@ export default function MyMepScreen() {
     loadProfiles();
   }, [user]);
 
-  /* Laad de secties en per sectie de taakinstances voor de geselecteerde datum */
-  useEffect(() => {
-    loadData();
-  }, [selectedDate]);
+  // useEffect(() => {
+  //   loadData();
+  // }, [selectedDate]);
 
-  /* loadData:
-  - Haal alle secties op voor de keuken
-  - Voor elke sectie: haal de taken op voor de geselecteerde datum
-  - Filter de taken: toon alleen taken waarvoor de actieve profiel-ID voorkomt in de assigned_to array
-  - Voeg de parent sectie-gegevens toe aan elke taak zodat deze beschikbaar zijn voor de modal
-  */
-  async function loadData() {
-    if (!user || !activeProfile) return;
+  /* 1) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
+  useEffect(() => {
+    if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
+    loadData(kitchenId);
+  }, [user, selectedDate]);
 
+  /* 2) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
+  async function loadData(kitchenId: string) {
     setLoading(true);
     try {
-      // 1) Haal alle secties op voor de keuken (datumfilter niet toepassen, want secties vormen de vaste menukaart)
+      // a) alle secties ophalen
       const secs = await fetchSections(kitchenId, selectedDate);
 
-      // 2) Voor elke sectie: haal de taken op voor de geselecteerde datum en voeg de section-data toe
+      // b) voor elke sectie: haal *alle* task‑instances op voor de selectedDate
       const merged: SectionData[] = await Promise.all(
         secs.map(async (sec: any) => {
-          // Haal de taken op voor de sectie via de helper functie
           const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
-          // Filter de taken: toon alleen taken waarvoor de actieve profiel-ID voorkomt in de assigned_to array
-          const filteredTasks = allTasks.filter((task: TaskRow) => {
-            return task.assigned_to?.includes(activeProfile.id);
-          });
-          // Voeg de parent sectie-gegevens toe aan elke taak zodat deze beschikbaar zijn voor de modal
-          const tasksWithSection = filteredTasks.map((t: any) => ({
+
+          // voeg sectie‑metadata toe aan elk task‑object
+          const tasksWithSection: TaskRow[] = allTasks.map((t: any) => ({
             ...t,
             section: {
               id: sec.id,
@@ -132,6 +116,7 @@ export default function MyMepScreen() {
               end_date: sec.end_date,
             },
           }));
+
           return {
             id: sec.id,
             section_name: sec.section_name,
@@ -141,11 +126,11 @@ export default function MyMepScreen() {
           };
         })
       );
-      // Optioneel: Filter secties waar geen enkele taak is toegewezen aan activeProfile
-      const sectionsWithTasks = merged.filter((sec) => sec.tasks.length > 0);
-      setSections(sectionsWithTasks);
-    } catch (error) {
-      console.log("Error loading my tasks:", error);
+
+      // c) optioneel: filter empty sections weg
+      setSections(merged.filter((sec) => sec.tasks.length > 0));
+    } catch (error: any) {
+      console.error("Error loading all tasks:", error);
     } finally {
       setLoading(false);
     }
@@ -182,8 +167,8 @@ export default function MyMepScreen() {
     try {
       await updateTaskInstanceInProgress(selectedTask.id);
       refreshSingleStatus("in progress");
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error(error);
     }
   }
   async function handleSetActiveTask() {
@@ -237,7 +222,6 @@ export default function MyMepScreen() {
     if (!selectedTask) return;
     const updated = { ...selectedTask, status, assigned_to };
     setSelectedTask(updated);
-
     setSections((secs) =>
       secs.map((sec) =>
         sec.id !== updated.section.id
@@ -337,7 +321,7 @@ export default function MyMepScreen() {
   };
 
   /* De rest van de modal: */
-  const renderMyMepModal = () => {
+  const renderAllTasksModal = () => {
     if (!selectedTask) return null;
     return (
       <Modal
@@ -520,15 +504,10 @@ export default function MyMepScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <AppText style={styles.headerText}>My MEP</AppText>
+        <AppText style={styles.headerText}>All</AppText>
       </View>
 
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Ionicons name="chevron-back" size={14} color="#000" />
-        <AppText style={styles.backText}>Back</AppText>
-      </TouchableOpacity>
-
-      {/* FlatList met secties en hun taken (gefilterd op activeProfile) */}
+      {/* FlatList met secties en taken (gefilterd op done/in progress) */}
       <FlatList
         data={sections}
         keyExtractor={(sec) => sec.id}
@@ -541,6 +520,12 @@ export default function MyMepScreen() {
                 backgroundColor: "transparent",
                 borderColor: "#ccc",
               };
+
+              // const isDone = task.status === "done";
+              // const isInProgress = task.status === "in progress";
+              // const isActive = task.status === "active";
+              // const isOutOfStock = task.status === "out of stock";
+              // const isInactive = task.status === "inactive";
 
               return (
                 <View key={task.id} style={styles.taskItemRow}>
@@ -591,7 +576,7 @@ export default function MyMepScreen() {
       />
 
       {/* --- Modal: Taakdetails --- */}
-      {renderMyMepModal()}
+      {renderAllTasksModal()}
     </View>
   );
 }
