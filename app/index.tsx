@@ -33,6 +33,9 @@ import CalendarModal from "@/components/CalendarModal";
 import AppText from "@/components/AppText";
 import { Ionicons } from "@expo/vector-icons";
 import AllTasksTabletView from "@/components/AllTasksTabletView";
+import TeamMepTabletView from "@/components/TeamMepTabletView";
+import MyMepTabletView from "@/components/MyMepTabletView";
+import OutOfStockTabletView from "@/components/OutOfStockTabletView";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -57,6 +60,7 @@ export default function HomeScreen() {
   const [newSectionEndDate, setNewSectionEndDate] = useState<string>(selectedDate);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [activeTab, setActiveTab] = useState("allTasks");
 
   /* Check of de user ingelogd is - anders redirect naar auth/login */
   useEffect(() => {
@@ -291,7 +295,6 @@ export default function HomeScreen() {
     );
   };
 
-  /* Render: Als loading of loadingSections true is, toon een indicator */
   if (loading || loadingSections) {
     return (
       <View style={styles.loadingContainer}>
@@ -308,6 +311,20 @@ export default function HomeScreen() {
       keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
       <View style={[styles.container, isTabletLandscape && styles.rowLayout]}>
+        {/* Avatar ALTIJD rechtsboven in tablet-view */}
+        {isTabletLandscape && (
+          <View style={styles.avatarAbsoluteContainer}>
+            <TouchableOpacity onPress={() => router.push("/profile/menu")}>
+              {activeProfile ? (
+                <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
+                  <AppText style={styles.avatarText}>{initials}</AppText>
+                </View>
+              ) : (
+                <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatar} />
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
         {/* ----------- Linker Kolom (alleen zichtbaar als niet collapsed) ----------- */}
         {!isTabletLandscape || !isSidebarCollapsed ? (
           <View style={styles.leftColumn}>
@@ -316,34 +333,40 @@ export default function HomeScreen() {
               <Image source={require("../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
               <DateSelector selectedDate={selectedDate} onDateChange={handleDateChange} />
 
-              {/* Toggle voor inklappen (alleen op tablet) */}
+              {/* Menu toggle icoon (alleen tablet) */}
               {isTabletLandscape && (
                 <TouchableOpacity onPress={() => setSidebarCollapsed((prev) => !prev)}>
-                  <Ionicons name="chevron-forward" size={16} color="#333" />
+                  <Ionicons name="menu" size={20} color="#333" />
                 </TouchableOpacity>
               )}
 
-              {/* Avatar */}
-              <TouchableOpacity onPress={() => router.push("/profile/menu")}>
-                {activeProfile ? (
-                  <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
-                    <AppText style={styles.avatarText}>{initials}</AppText>
-                  </View>
-                ) : (
-                  <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatar} />
-                )}
-              </TouchableOpacity>
+              {/* Avatar (alleen mobiel zichtbaar in linker header) */}
+              {!isTabletLandscape && (
+                <TouchableOpacity onPress={() => router.push("/profile/menu")}>
+                  {activeProfile ? (
+                    <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
+                      <AppText style={styles.avatarText}>{initials}</AppText>
+                    </View>
+                  ) : (
+                    <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatar} />
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
 
-            {/* Stats */}
-            <StatsSection
-              myMepCount={myMepCount}
-              teamMepCount={teamMepCount}
-              allPercentage={allPercentage}
-              outOfStockCount={outOfStockCount}
-            />
+            {/* Stats-sectie */}
+            <View style={{ width: "100%" }}>
+              <StatsSection
+                allPercentage={allPercentage}
+                teamMepCount={teamMepCount}
+                myMepCount={myMepCount}
+                outOfStockCount={outOfStockCount}
+                isTablet={isTabletLandscape}
+                onTabSelect={setActiveTab}
+              />
+            </View>
 
-            {/* Secties + Add Button */}
+            {/* SectionItems alleen op mobiel of in sidebar */}
             <View style={styles.listContainer}>
               <TouchableOpacity style={styles.addSectionButton} onPress={() => setShowAddModal(true)}>
                 <View style={styles.plusCircle}>
@@ -359,7 +382,6 @@ export default function HomeScreen() {
               />
             </View>
 
-            {/* Modal voor toevoegen */}
             {renderAddSectionModal()}
           </View>
         ) : null}
@@ -367,7 +389,21 @@ export default function HomeScreen() {
         {/* ----------- Rechter Kolom (alleen op tablet) ----------- */}
         {isTabletLandscape && (
           <View style={styles.rightColumn}>
-            <AllTasksTabletView />
+            {/* Rechter header: avatar en toggle */}
+            <View style={styles.rightColumnHeader}>
+              {/* Menu toggle icoon als sidebar collapsed is */}
+              {isSidebarCollapsed && (
+                <TouchableOpacity onPress={() => setSidebarCollapsed(false)}>
+                  <Ionicons name="menu" size={20} color="#333" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Dynamische tab-content */}
+            {activeTab === "allTasks" && <AllTasksTabletView />}
+            {activeTab === "teamMep" && <TeamMepTabletView />}
+            {activeTab === "myMep" && <MyMepTabletView />}
+            {activeTab === "outOfStock" && <OutOfStockTabletView />}
           </View>
         )}
       </View>
@@ -381,6 +417,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#fafafa",
     paddingHorizontal: 16,
     paddingTop: 25,
+  },
+  avatarAbsoluteContainer: {
+    position: "absolute",
+    top: 20,
+    right: 20,
+    zIndex: 10,
   },
   loadingContainer: {
     flex: 1,
@@ -470,7 +512,6 @@ const styles = StyleSheet.create({
   },
   cancelButton: { padding: 10, alignItems: "center" },
   cancelButtonText: { color: "#666" },
-
   listContainer: {
     // flex: 1,
     paddingVertical: 10,
@@ -504,15 +545,17 @@ const styles = StyleSheet.create({
   rowLayout: {
     flexDirection: "row",
   },
-  
   leftColumn: {
-    flex: 1,
-    paddingRight: 8,
+    flex: 0.5,
   },
-  
   rightColumn: {
     flex: 1,
-    paddingLeft: 8,
     backgroundColor: "#f6f6f6",
+  },
+  rightColumnHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
   },
 });

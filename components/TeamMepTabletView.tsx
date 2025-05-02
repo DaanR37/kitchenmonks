@@ -1,25 +1,38 @@
 import React, { useState, useEffect, useContext } from "react";
-import { View, StyleSheet, TouchableOpacity, Modal, FlatList, Pressable } from "react-native";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  FlatList,
+  Pressable,
+} from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
+import { getTasksForSectionOnDate } from "@/services/api/taskHelpers"; /* Haal de dag-specifieke taken voor een sectie op, door de logica in taskHelpers te gebruiken */
 import {
-  updateTaskInstanceInProgress,
-  updateTaskInstanceDone,
   updateTaskInstanceStatus,
   assignTaskInstance,
+  updateTaskInstanceInProgress,
+  updateTaskInstanceDone,
 } from "@/services/api/taskInstances";
 import { fetchProfiles } from "@/services/api/profiles";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
 import AppText from "@/components/AppText";
 
+/* 
+  Type definitie voor een task (taakinstance) 
+  - task_template_id: de referentie naar de task template (moet een geldige waarde zijn in task_templates)
+  - section: de gekoppelde sectie (via de foreign key)
+*/
 export type TaskRow = {
   id: string;
   task_name: string;
   status: string;
   date: string;
+  /* Voor toewijzing gebruiken we een array met profile IDs */
   assigned_to?: string[];
   task_template_id: string;
   section_id: string;
@@ -30,7 +43,10 @@ export type TaskRow = {
     end_date?: string;
   };
 };
-
+/* 
+  Type definitie voor een sectie 
+  - Elke sectie bevat een naam en een lijst van taakinstances (TaskRow)
+*/
 export type SectionData = {
   id: string;
   section_name: string;
@@ -55,7 +71,7 @@ const STATUS_META: Record<string, StatusMeta> = {
   edit: { backgroundColor: "#000", icon: "create" },
 };
 
-export default function AllTasksTabletView() {
+export default function TeamMepTabletView() {
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
   const [sections, setSections] = useState<SectionData[]>([]);
@@ -80,55 +96,66 @@ export default function AllTasksTabletView() {
     loadProfiles();
   }, [user]);
 
-  // useEffect(() => {
-  //   loadData();
-  // }, [selectedDate]);
-
-  /* 1) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
+  /* Laad de secties en per sectie de taakinstances voor de geselecteerde datum */
   useEffect(() => {
+    loadData();
+  }, [selectedDate]);
+
+  /*
+    loadData:
+    1. Controleer of de user en kitchen_id beschikbaar zijn.
+    2. Haal alle secties op voor deze keuken via fetchSections.
+    3. Voor elke sectie roep je de helperfunctie getTasksForSectionOnDate aan,
+       die de geldige task_instances (of indien afwezig, nieuwe instances) ophaalt voor de selectedDate.
+    4. Combineer (merge) de secties met hun taken en sla dit op in de lokale state.
+  */
+  async function loadData() {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
-    loadData(kitchenId);
-  }, [user, selectedDate]);
 
-  /* 2) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
-  async function loadData(kitchenId: string) {
     setLoading(true);
     try {
-      // a) alle secties ophalen
+      /* 1) Haal alle secties op voor de keuken */
       const secs = await fetchSections(kitchenId, selectedDate);
-
-      // b) voor elke sectie: haal *alle* task‑instances op voor de selectedDate
+      /* 2) Voor elke sectie: haal de taken voor de geselecteerde datum op en voeg de section-gegevens (inclusief datums) toe */
       const merged: SectionData[] = await Promise.all(
         secs.map(async (sec: any) => {
+          /* Haal de taken op voor deze sectie voor de geselecteerde datum. */
           const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
 
-          // voeg sectie‑metadata toe aan elk task‑object
-          const tasksWithSection: TaskRow[] = allTasks.map((t: any) => ({
-            ...t,
-            section: {
-              id: sec.id,
-              section_name: sec.section_name,
-              start_date: sec.start_date,
-              end_date: sec.end_date,
-            },
-          }));
+          const tasks = allTasks
+            .filter(
+              (t) =>
+                t.status === "active" ||
+                t.status === "in progress" ||
+                t.status === "done" ||
+                t.status === "out of stock"
+            )
+            .map((t: any) => ({
+              ...t,
+              section: {
+                id: sec.id,
+                section_name: sec.section_name,
+                start_date: sec.start_date,
+                end_date: sec.end_date,
+              },
+            }));
 
           return {
             id: sec.id,
             section_name: sec.section_name,
             start_date: sec.start_date,
             end_date: sec.end_date,
-            tasks: tasksWithSection,
-          };
+            tasks,
+          } as SectionData;
         })
       );
-
-      // c) optioneel: filter empty sections weg
-      setSections(merged.filter((sec) => sec.tasks.length > 0));
-    } catch (error: any) {
-      console.error("Error loading all tasks:", error);
+      // setSections(merged);
+      /* drop lege secties */
+      setSections(merged.filter((s) => s.tasks.length > 0));
+    } catch (error) {
+      console.log("Error loading inactive tasks:", error);
     } finally {
       setLoading(false);
     }
@@ -165,8 +192,8 @@ export default function AllTasksTabletView() {
     try {
       await updateTaskInstanceInProgress(selectedTask.id);
       refreshSingleStatus("in progress");
-    } catch (error) {
-      console.error(error);
+    } catch (e) {
+      console.error(e);
     }
   }
   async function handleSetActiveTask() {
@@ -220,6 +247,7 @@ export default function AllTasksTabletView() {
     if (!selectedTask) return;
     const updated = { ...selectedTask, status, assigned_to };
     setSelectedTask(updated);
+
     setSections((secs) =>
       secs.map((sec) =>
         sec.id !== updated.section.id
@@ -243,9 +271,12 @@ export default function AllTasksTabletView() {
   }
 
   function cleanTaskName(fullName: string): string {
+    /* Splits de naam op spaties */
     const parts = fullName.split(" ");
+    /* Controleer of het laatste onderdeel enkel cijfers bevat en minstens 10 tekens lang is (een indicatie van een timestamp) */
     const lastPart = parts[parts.length - 1];
     if (/^\d{10,}$/.test(lastPart)) {
+      // Verwijder het laatste element en voeg de rest weer samen
       parts.pop();
       return parts.join(" ");
     }
@@ -319,7 +350,7 @@ export default function AllTasksTabletView() {
   };
 
   /* De rest van de modal: */
-  const renderAllTasksModal = () => {
+  const renderTeamMepModal = () => {
     if (!selectedTask) return null;
     return (
       <Modal
@@ -493,7 +524,7 @@ export default function AllTasksTabletView() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <AppText>Loading my tasks for {selectedDate}...</AppText>
+        <AppText>Loading tasks for {selectedDate}...</AppText>
       </View>
     );
   }
@@ -502,10 +533,10 @@ export default function AllTasksTabletView() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <AppText style={styles.headerText}>All</AppText>
+        <AppText style={styles.headerText}>Team MEP</AppText>
       </View>
 
-      {/* FlatList met secties en taken (gefilterd op done/in progress) */}
+      {/* Lijst met secties en hun taken */}
       <FlatList
         data={sections}
         keyExtractor={(sec) => sec.id}
@@ -548,7 +579,7 @@ export default function AllTasksTabletView() {
                     </AppText>
                   </Pressable>
 
-                  {/* 3) kleine assigned‑thumbnails */}
+                  {/* ③ kleine assigned‑thumbnails */}
                   <View style={styles.assignedBubbles}>
                     {task.assigned_to?.map((pid) => {
                       const prof = allProfiles.find((p) => p.id === pid);
@@ -570,7 +601,7 @@ export default function AllTasksTabletView() {
       />
 
       {/* --- Modal: Taakdetails --- */}
-      {renderAllTasksModal()}
+      {renderTeamMepModal()}
     </View>
   );
 }
@@ -594,10 +625,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
-  addTaskButton: { marginTop: 16, paddingVertical: 0 },
-  addTaskText: { color: "#666" },
-
-  // -- Modals --
+  
+  // -- Modals styling --
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "flex-end" },
 
   // De 'onderste' container waarin de inhoud van de modal komt (zoals in je voorbeeld)
@@ -609,14 +638,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 0,
   },
-  modalContent: {
-    backgroundColor: "#fff",
-    padding: 16,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    paddingTop: 30,
-  },
-  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10, color: "#333" },
   modalTaskTitle: {
     fontSize: 18,
     fontWeight: "bold",
@@ -624,19 +645,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 10,
   },
-
-  input: { backgroundColor: "#f2f2f2", padding: 8, borderRadius: 6, marginBottom: 12 },
-  saveButton: {
-    backgroundColor: "#6C63FF",
-    padding: 10,
-    borderRadius: 6,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  saveButtonText: { color: "#fff", fontWeight: "bold" },
-  cancelButton: { padding: 10, alignItems: "center" },
-  cancelButtonText: { color: "#333", fontWeight: "bold" },
-
   // -- Assign to styling --
   assignTitle: {
     fontSize: 16,
@@ -671,10 +679,10 @@ const styles = StyleSheet.create({
   taskItemRow: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#fff",
     marginBottom: 6,
     padding: 10,
     borderRadius: 6,
-    backgroundColor: "#fff",
   },
   taskStatusCircleContainer: {
     width: 1,
@@ -747,7 +755,7 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     backgroundColor: "#f2f2f2",
   },
-  // Als de status “geselecteerd” is, kun je wat highlight geven
+  // Als de status "geselecteerd" is, kun je wat highlight geven
   statusOvalSelected: {
     backgroundColor: "#9fdc8ab5",
   },

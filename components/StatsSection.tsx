@@ -4,11 +4,13 @@ import { useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AppText from "@/components/AppText";
 
-type StatsSectionProps = {
+export type StatsSectionProps = {
   allPercentage: number;
   teamMepCount: number;
   myMepCount: number;
   outOfStockCount: number;
+  isTablet: boolean;
+  onTabSelect: (tab: string) => void;
 };
 
 export default function StatsSection({
@@ -16,6 +18,8 @@ export default function StatsSection({
   teamMepCount,
   myMepCount,
   outOfStockCount,
+  isTablet,
+  onTabSelect,
 }: StatsSectionProps) {
   const router = useRouter();
 
@@ -23,8 +27,12 @@ export default function StatsSection({
     <View style={styles.statsContainer}>
       {/* Rij 1, met "All" (links) en "Out of stock" (rechts) */}
       <View style={styles.statsRow}>
+
         {/* All */}
-        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/allTasks")}>
+        <TouchableOpacity
+          style={styles.statBox}
+          onPress={() => (isTablet ? onTabSelect("allTasks") : router.push("/tasks/allTasks"))}
+        >
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#0066ff" }]}>
               <Ionicons name="layers-outline" size={14} color="#fff" />
@@ -36,7 +44,10 @@ export default function StatsSection({
         </TouchableOpacity>
 
         {/* Team MEP */}
-        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/teamMep")}>
+        <TouchableOpacity
+          style={styles.statBox}
+          onPress={() => (isTablet ? onTabSelect("teamMep") : router.push("/tasks/teamMep"))}
+        >
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#00bb06" }]}>
               <Ionicons name="people-outline" size={14} color="#fff" />
@@ -50,7 +61,10 @@ export default function StatsSection({
       {/* Rij 2, met "My tasks" (links) en "Inactive" (rechts) */}
       <View style={styles.statsRow}>
         {/* My MEP */}
-        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/myMep")}>
+        <TouchableOpacity
+          style={styles.statBox}
+          onPress={() => (isTablet ? onTabSelect("myMep") : router.push("/tasks/myMep"))}
+        >
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#ff9000" }]}>
               <Ionicons name="person-outline" size={14} color="#fff" />
@@ -61,7 +75,10 @@ export default function StatsSection({
         </TouchableOpacity>
 
         {/* Out of stock */}
-        <TouchableOpacity style={styles.statBox} onPress={() => router.push("/tasks/outOfStock")}>
+        <TouchableOpacity
+          style={styles.statBox}
+          onPress={() => (isTablet ? onTabSelect("outOfStock") : router.push("/tasks/outOfStock"))}
+        >
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#FF6347" }]}>
               <Ionicons name="cart-outline" size={14} color="#fff" />

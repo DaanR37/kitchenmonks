@@ -1,79 +1,41 @@
 import React, { useState, useEffect, useContext } from "react";
-import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  Modal,
-  Pressable,
-} from "react-native";
+import { View, StyleSheet, TouchableOpacity, FlatList, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
-import { ProfileContext, ProfileData } from "@/services/ProfileContext";
+import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
-import {
-  updateTaskInstanceStatus,
-  assignTaskInstance,
-  updateTaskInstanceDone,
-  updateTaskInstanceInProgress,
-} from "@/services/api/taskInstances";
 import { fetchProfiles } from "@/services/api/profiles";
-import Ionicons from "@expo/vector-icons/Ionicons";
+import Ionicons from "@expo/vector-icons/build/Ionicons";
 import AppText from "@/components/AppText";
-
-export type TaskRow = {
-  id: string;
-  task_name: string;
-  status: string;
-  date: string;
-  /* Voor toewijzing gebruiken we een array met profile IDs */
-  assigned_to?: string[];
-  task_template_id: string;
-  section_id: string;
-  /* Deze property wordt toegevoegd zodat we later de parent sectie informatie in de modal kunnen tonen */
-  section: {
-    id: string;
-    section_name: string;
-    start_date?: string;
-    end_date?: string;
-  };
-};
-
-export type SectionData = {
-  id: string;
-  section_name: string;
-  start_date: string;
-  end_date: string;
-  tasks: TaskRow[];
-};
-
-export type StatusMeta = {
-  backgroundColor: string;
-  borderColor?: string;
-  icon?: keyof typeof Ionicons.glyphMap;
-  iconColor?: string;
-};
-
-const STATUS_META: Record<string, StatusMeta> = {
-  done: { backgroundColor: "#00AA00", icon: "checkmark", iconColor: "#fff" },
-  "in progress": { backgroundColor: "#0066ff", icon: "refresh", iconColor: "#fff" },
-  active: { backgroundColor: "transparent", borderColor: "#999" /* geen icon */ },
-  inactive: { backgroundColor: "transparent", borderColor: "#ccc" /* geen icon */ },
-  "out of stock": { backgroundColor: "#ff6347", icon: "alert", iconColor: "#fff" },
-  edit: { backgroundColor: "#000", icon: "create" },
-};
+import useTaskModal from "@/hooks/useTaskModal";
+import { TaskRow, SectionData } from "@/hooks/useTaskModal";
+import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
+import TaskDetailsModal from "@/components/TaskDetailsModal";
+import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
 
 export default function OutOfStockScreen() {
   const router = useRouter();
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
+  // const { activeProfile } = useContext(ProfileContext);
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
+
+  const {
+    selectedTask,
+    showDetailsModal,
+    openModal,
+    closeModal,
+    handleToggleAssignTask,
+    handleSetDone,
+    handleSetInProgress,
+    handleSetActiveTask,
+    handleSetInactiveTask,
+    handleSetOutOfStock,
+  } = useTaskModal({ sections, setSections });
 
   /* Haal eerst de profielen op zodra de user beschikbaar is */
   useEffect(() => {
@@ -127,361 +89,10 @@ export default function OutOfStockScreen() {
     setLoading(false);
   }
 
-  /* 3) Handlers voor in‑progress / done / assign / etc. (zelfde als voor MyTasks) */
-  async function handleToggleAssignTask(profileId: string) {
-    if (!selectedTask) return;
-    const current = selectedTask.assigned_to ?? [];
-    const next = current.includes(profileId)
-      ? current.filter((id) => id !== profileId)
-      : [...current, profileId];
-    const newStatus = next.length > 0 ? "active" : "inactive";
-
-    try {
-      await assignTaskInstance(selectedTask.id, next);
-      await updateTaskInstanceStatus(selectedTask.id, newStatus);
-      refreshSingleStatus(newStatus, next);
-    } catch (e) {
-      console.error(e);
-    }
-  }
-  async function handleSetDone() {
-    if (!selectedTask) return;
-    try {
-      await updateTaskInstanceDone(selectedTask.id);
-      refreshSingleStatus("done");
-    } catch (e) {
-      console.error(e);
-    }
-  }
-  async function handleSetInProgress() {
-    if (!selectedTask) return;
-    try {
-      await updateTaskInstanceInProgress(selectedTask.id);
-      refreshSingleStatus("in progress");
-    } catch (e) {
-      console.error(e);
-    }
-  }
-  async function handleSetActiveTask() {
-    if (!selectedTask) return;
-    await updateTaskInstanceStatus(selectedTask.id, "active");
-    /* Update de lokale state: wijzig de status in de juiste sectie */
-    const updatedSections = sections.map((sec) => {
-      if (sec.id !== selectedTask.section.id) return sec;
-      return {
-        ...sec,
-        tasks: sec.tasks.map((t) => (t.id === selectedTask.id ? { ...t, status: "active" } : t)),
-      };
-    });
-    setSections(updatedSections);
-    closeTaskDetailsModal();
-  }
-  async function handleSetInactiveTask() {
-    if (!selectedTask) return;
-    try {
-      // toewijzingen ongedaan maken
-      await updateTaskInstanceStatus(selectedTask.id, "inactive");
-      await assignTaskInstance(selectedTask.id, []);
-      // ... update local state ...
-      const updatedSections = sections.map((sec) => {
-        if (sec.id !== selectedTask.section.id) return sec;
-        return {
-          ...sec,
-          tasks: sec.tasks.map((t) =>
-            t.id === selectedTask.id ? { ...t, status: "inactive", assigned_to: [] } : t
-          ),
-        };
-      });
-      setSections(updatedSections);
-      closeTaskDetailsModal();
-    } catch (error) {
-      console.log("Error setting inactive:", error);
-    }
-  }
-  async function handleSetOutOfStock() {
-    if (!selectedTask) return;
-    try {
-      await updateTaskInstanceStatus(selectedTask.id, "out of stock");
-      refreshSingleStatus("out of stock");
-    } catch (error) {
-      console.log("Error setting out of stock:", error);
-    }
-  }
-
-  /* helper om één taak in state bij te werken */
-  function refreshSingleStatus(status: string, assigned_to: string[] = selectedTask?.assigned_to ?? []) {
-    if (!selectedTask) return;
-    const updated = { ...selectedTask, status, assigned_to };
-    setSelectedTask(updated);
-
-    setSections((secs) =>
-      secs.map((sec) =>
-        sec.id !== updated.section.id
-          ? sec
-          : {
-              ...sec,
-              tasks: sec.tasks.map((t) => (t.id === updated.id ? updated : t)),
-            }
-      )
-    );
-  }
-
-  /* Handlers voor de taak details modal */
-  function openTaskDetailsModal(task: TaskRow) {
-    setSelectedTask(task);
-    setShowDetailsModal(true);
-  }
-  function closeTaskDetailsModal() {
-    setSelectedTask(null);
-    setShowDetailsModal(false);
-  }
-
-  function cleanTaskName(fullName: string): string {
-    const parts = fullName.split(" ");
-    const lastPart = parts[parts.length - 1];
-    if (/^\d{10,}$/.test(lastPart)) {
-      parts.pop();
-      return parts.join(" ");
-    }
-    return fullName;
-  }
-
-  function generateInitials(firstName?: string, lastName?: string): string {
-    const firstInitial = firstName ? firstName.charAt(0).toUpperCase() : "";
-    const lastInitial = lastName ? lastName.charAt(0).toUpperCase() : "";
-    return `${firstInitial}${lastInitial}`;
-  }
-  function getColorFromId(id: string): string {
-    const colorPalette = ["#3300ff", "#ff6200", "#00931d", "#d02350", "#6C63FF", "#FC3D21"];
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) {
-      hash = id.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const index = Math.abs(hash) % colorPalette.length;
-    return colorPalette[index];
-  }
-
   /* Handle the circle press */
   const handleCirclePress = async (task: TaskRow) => {
-    // 1) Update DB
-    await updateTaskInstanceDone(task.id);
-    // 2) Lokale state bijwerken
-    setSections((prev) =>
-      prev.map((sec) => {
-        if (sec.id !== task.section.id) return sec;
-        return {
-          ...sec,
-          tasks: sec.tasks.map((t) => (t.id === task.id ? { ...t, status: "done" } : t)),
-        };
-      })
-    );
-
-    // 3) Modal openen
-    setSelectedTask({ ...task, status: "done" });
-    setShowDetailsModal(true);
-  };
-
-  /* horizontale slider styling */
-  const renderProfileBubbles = () => {
-    if (!selectedTask) return null;
-    return (
-      <FlatList
-        horizontal
-        data={allProfiles}
-        keyExtractor={(item) => item.id}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.profileBubblesContainer}
-        renderItem={({ item: profile }) => {
-          const initials = (profile.first_name.charAt(0) + profile.last_name.charAt(0)).toUpperCase();
-          const isAssigned = selectedTask?.assigned_to?.includes(profile.id);
-          return (
-            <TouchableOpacity
-              style={[
-                styles.profileBubble,
-                { backgroundColor: getColorFromId(profile.id) },
-                isAssigned && styles.profileBubbleSelected,
-              ]}
-              onPress={() => handleToggleAssignTask(profile.id)}
-              key={profile.id}
-            >
-              <AppText style={styles.profileBubbleText}>{initials}</AppText>
-            </TouchableOpacity>
-          );
-        }}
-      />
-    );
-  };
-
-  /* De rest van de modal: */
-  const renderOutOfStockModal = () => {
-    if (!selectedTask) return null;
-    return (
-      <Modal
-        visible={showDetailsModal}
-        transparent
-        animationType="slide"
-        onRequestClose={closeTaskDetailsModal}
-      >
-        <Pressable style={styles.modalOverlay} onPress={closeTaskDetailsModal}>
-          <Pressable style={styles.bottomModalContainer} onPress={(e) => e.stopPropagation()}>
-            {/* Taaknaam */}
-            <AppText style={styles.modalTaskTitle}>{cleanTaskName(selectedTask.task_name)}</AppText>
-            <AppText style={styles.assignTitle}>Assign to:</AppText>
-
-            {/* Horizontale slider met profielen */}
-            {renderProfileBubbles()}
-
-            {/* Status-keuzes in 3x3 layout, etc. */}
-            <View style={styles.statusGridContainer}>
-              <AppText style={styles.statusGridTitle}>Status</AppText>
-
-              {/* Rij 1: Done / In progress */}
-              <View style={styles.statusGridRow}>
-                {/* Done */}
-                <TouchableOpacity
-                  style={[styles.statusOval, selectedTask.status === "done" && styles.statusOvalSelected]}
-                  onPress={handleSetDone}
-                >
-                  {/* Cirkeltje links, evt. met icon */}
-                  <View
-                    style={[
-                      styles.statusOvalCircle,
-                      { backgroundColor: "#00AA00" }, // groen voor active
-                      selectedTask.status !== "done" && { opacity: 0.5 },
-                    ]}
-                  >
-                    {/* Eventueel een icoon */}
-                    {/* <Ionicons name="checkmark" size={14} color="#fff" /> */}
-                  </View>
-
-                  {/* Tekst in de ovale knop */}
-                  <AppText
-                    style={[
-                      styles.statusOvalLabel,
-                      selectedTask.status === "done" && { color: "#000", fontWeight: "bold" },
-                      // selectedTask?.status === "inactive" && styles.statusOvalLabelSelected,
-                    ]}
-                  >
-                    Done
-                  </AppText>
-                </TouchableOpacity>
-
-                {/* In progress */}
-                <TouchableOpacity
-                  style={[
-                    styles.statusOval,
-                    selectedTask.status === "in progress" && styles.statusOvalSelected,
-                  ]}
-                  onPress={() => handleSetInProgress()}
-                >
-                  <View
-                    style={[
-                      styles.statusOvalCircle,
-                      { backgroundColor: "#999" },
-                      selectedTask.status !== "in progress" && { opacity: 0.5 },
-                    ]}
-                  />
-                  <AppText
-                    style={[
-                      styles.statusOvalLabel,
-                      selectedTask.status === "in progress" && { color: "#000", fontWeight: "bold" },
-                      // selectedTask?.status === "inactive" && styles.statusOvalLabelSelected,
-                    ]}
-                  >
-                    In progress
-                  </AppText>
-                </TouchableOpacity>
-              </View>
-
-              {/* Rij 2: Active / Out of Stock */}
-              <View style={styles.statusGridRow}>
-                {/* Active */}
-                <TouchableOpacity
-                  style={[styles.statusOval, selectedTask.status === "active" && styles.statusOvalSelected]}
-                  onPress={handleSetActiveTask}
-                >
-                  <View
-                    style={[
-                      styles.statusOvalCircle,
-                      { backgroundColor: "#FF6347" }, // Tomaat-rood
-                      selectedTask.status !== "active" && { opacity: 0.5 },
-                    ]}
-                  >
-                    {/* voorbeeld van icoontje */}
-                    <Ionicons name="alert" size={14} color="#fff" />
-                  </View>
-                  <AppText
-                    style={[
-                      styles.statusOvalLabel,
-                      selectedTask.status === "active" && { color: "#000", fontWeight: "bold" },
-                    ]}
-                  >
-                    Active
-                  </AppText>
-                </TouchableOpacity>
-
-                {/* Out of Stock */}
-                <TouchableOpacity
-                  style={[
-                    styles.statusOval,
-                    selectedTask.status === "out of stock" && styles.statusOvalSelected,
-                  ]}
-                  onPress={handleSetOutOfStock}
-                >
-                  <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
-                    <Ionicons name="create" size={14} color="#fff" />
-                  </View>
-                  <AppText
-                    style={[
-                      styles.statusOvalLabel,
-                      selectedTask.status === "out of stock" && { color: "#000", fontWeight: "bold" },
-                    ]}
-                  >
-                    Out of Stock
-                  </AppText>
-                </TouchableOpacity>
-              </View>
-
-              {/* Rij 3: Inactive / Edit */}
-              <View style={styles.statusGridRow}>
-                {/* Inactive */}
-                <TouchableOpacity
-                  style={[styles.statusOval, selectedTask.status === "inactive" && styles.statusOvalSelected]}
-                  onPress={handleSetInactiveTask}
-                >
-                  <View
-                    style={[
-                      styles.statusOvalCircle,
-                      { backgroundColor: "#999" }, // Tomaat-rood
-                      selectedTask.status !== "inactive" && { opacity: 0.5 },
-                    ]}
-                  >
-                    {/* voorbeeld van icoontje */}
-                    <Ionicons name="alert" size={14} color="#fff" />
-                  </View>
-                  <AppText
-                    style={[
-                      styles.statusOvalLabel,
-                      selectedTask.status === "inactive" && { color: "#000", fontWeight: "bold" },
-                    ]}
-                  >
-                    Inactive
-                  </AppText>
-                </TouchableOpacity>
-
-                {/* Edit */}
-                <TouchableOpacity style={styles.statusOval} onPress={() => console.log("Edit")}>
-                  <View style={[styles.statusOvalCircle, { backgroundColor: "#555" }]}>
-                    <Ionicons name="create" size={14} color="#fff" />
-                  </View>
-                  <AppText style={styles.statusOvalLabel}>Edit</AppText>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    );
+    await handleSetDone();
+    openModal({ ...task, status: "done" });
   };
 
   if (loading) {
@@ -513,10 +124,10 @@ export default function OutOfStockScreen() {
             <AppText style={styles.sectionTitle}>{sec.section_name}</AppText>
 
             {sec.tasks.map((task) => {
-              const meta = STATUS_META[task.status] || {
+              const meta = (STATUS_META[task.status as keyof typeof STATUS_META] || {
                 backgroundColor: "transparent",
                 borderColor: "#ccc",
-              };
+              }) as StatusMeta;
 
               return (
                 <View key={task.id} style={styles.taskItemRow}>
@@ -534,7 +145,7 @@ export default function OutOfStockScreen() {
                   </Pressable>
 
                   {/* 2) Resterende (taak)rij opent modal */}
-                  <Pressable style={styles.taskTextContainer} onPress={() => openTaskDetailsModal(task)}>
+                  <Pressable style={styles.taskTextContainer} onPress={() => openModal(task)}>
                     <AppText
                       style={[
                         styles.taskText,
@@ -567,7 +178,22 @@ export default function OutOfStockScreen() {
       />
 
       {/* --- Modal: Taakdetails --- */}
-      {renderOutOfStockModal()}
+      <TaskDetailsModal
+        visible={showDetailsModal}
+        onClose={closeModal}
+        selectedTask={selectedTask}
+        allProfiles={allProfiles}
+        STATUS_META={STATUS_META}
+        onAssignToggle={handleToggleAssignTask}
+        onSetDone={handleSetDone}
+        onSetInProgress={handleSetInProgress}
+        onSetActive={handleSetActiveTask}
+        onSetInactive={handleSetInactiveTask}
+        onSetOutOfStock={handleSetOutOfStock}
+        cleanTaskName={cleanTaskName}
+        generateInitials={generateInitials}
+        getColorFromId={getColorFromId}
+      />
     </View>
   );
 }
@@ -580,7 +206,6 @@ const styles = StyleSheet.create({
   backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 12 },
   backText: { fontSize: 17, color: "#666", marginLeft: 4 },
 
-  // -- De secties op het hoofdscherm --
   sectionContainer: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
@@ -589,63 +214,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
-  // taskItem: { backgroundColor: "#eee", marginBottom: 6, padding: 10, borderRadius: 6 },
-  // taskText: { color: "#333", fontSize: 16 },
-  // doneText: { color: "#000" },
-  // inactiveText: { color: "#666" },
-  addTaskButton: { marginTop: 16, paddingVertical: 0 },
-  addTaskText: { color: "#666" },
 
-  // -- Modals --
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "flex-end" },
-
-  // De 'onderste' container waarin de inhoud van de modal komt (zoals in je voorbeeld)
-  bottomModalContainer: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 15,
-    paddingTop: 20,
-    paddingBottom: 0,
-  },
-  modalTaskTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    textAlign: "center",
-    marginBottom: 10,
-  },
-  // -- Assign to styling --
-  assignTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-  },
-  profileBubblesContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap", // zodat de bubbles doorlopen op een nieuwe regel als ze niet passen
-  },
-  profileBubble: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#bbb",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  profileBubbleSelected: {
-    backgroundColor: "#6C63FF",
-    borderWidth: 3,
-    borderColor: "black",
-  },
-  profileBubbleText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 15,
-  },
   taskItemRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -653,10 +222,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     padding: 10,
     borderRadius: 6,
-    // backgroundColor: "#eee",
-    // marginBottom: 8,
-    // paddingVertical: 12,
-    // paddingHorizontal: 16,
   },
   taskStatusCircleContainer: {
     width: 1,
@@ -701,52 +266,5 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",
-  },
-
-  // 3x3 knoppen layout voor de status
-  statusGridContainer: {
-    marginBottom: 24,
-  },
-  statusGridTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-    marginTop: 12,
-  },
-  statusGridRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-    gap: 6,
-  },
-  /* De ovale container */
-  statusOval: {
-    flex: 1, // zodat ze even breed worden
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 0,
-    borderRadius: 50,
-    backgroundColor: "#f2f2f2",
-  },
-  // Als de status “geselecteerd” is, kun je wat highlight geven
-  statusOvalSelected: {
-    backgroundColor: "#9fdc8ab5",
-  },
-  statusOvalCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    marginRight: 8,
-    marginLeft: 4,
-    marginTop: 4,
-    marginBottom: 4,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statusOvalLabel: {
-    color: "#333",
-    fontSize: 15,
-    fontWeight: "500",
   },
 });

@@ -1,18 +1,25 @@
 import React, { useState, useEffect, useContext } from "react";
-import { View, StyleSheet, TouchableOpacity, Modal, FlatList, Pressable } from "react-native";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  Modal,
+  Pressable,
+} from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
-import { ProfileData } from "@/services/ProfileContext";
+import { ProfileContext, ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import {
-  updateTaskInstanceInProgress,
-  updateTaskInstanceDone,
   updateTaskInstanceStatus,
   assignTaskInstance,
+  updateTaskInstanceDone,
+  updateTaskInstanceInProgress,
 } from "@/services/api/taskInstances";
 import { fetchProfiles } from "@/services/api/profiles";
-import Ionicons from "@expo/vector-icons/build/Ionicons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import AppText from "@/components/AppText";
 
 export type TaskRow = {
@@ -20,9 +27,11 @@ export type TaskRow = {
   task_name: string;
   status: string;
   date: string;
+  /* Voor toewijzing gebruiken we een array met profile IDs */
   assigned_to?: string[];
   task_template_id: string;
   section_id: string;
+  /* Deze property wordt toegevoegd zodat we later de parent sectie informatie in de modal kunnen tonen */
   section: {
     id: string;
     section_name: string;
@@ -55,7 +64,7 @@ const STATUS_META: Record<string, StatusMeta> = {
   edit: { backgroundColor: "#000", icon: "create" },
 };
 
-export default function AllTasksTabletView() {
+export default function OutOfStockTabletView() {
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
   const [sections, setSections] = useState<SectionData[]>([]);
@@ -80,58 +89,40 @@ export default function AllTasksTabletView() {
     loadProfiles();
   }, [user]);
 
-  // useEffect(() => {
-  //   loadData();
-  // }, [selectedDate]);
-
-  /* 1) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
+  /* Laad de secties en per sectie de taakinstances voor de geselecteerde datum */
   useEffect(() => {
     if (!user) return;
-    const kitchenId = user.user_metadata?.kitchen_id;
-    if (!kitchenId) return;
-    loadData(kitchenId);
+    loadData();
   }, [user, selectedDate]);
 
-  /* 2) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
-  async function loadData(kitchenId: string) {
+  async function loadData() {
     setLoading(true);
-    try {
-      // a) alle secties ophalen
-      const secs = await fetchSections(kitchenId, selectedDate);
-
-      // b) voor elke sectie: haal *alle* task‑instances op voor de selectedDate
-      const merged: SectionData[] = await Promise.all(
-        secs.map(async (sec: any) => {
-          const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
-
-          // voeg sectie‑metadata toe aan elk task‑object
-          const tasksWithSection: TaskRow[] = allTasks.map((t: any) => ({
-            ...t,
-            section: {
-              id: sec.id,
-              section_name: sec.section_name,
-              start_date: sec.start_date,
-              end_date: sec.end_date,
-            },
-          }));
-
-          return {
+    const kitchenId = user!.user_metadata.kitchen_id;
+    const secs = await fetchSections(kitchenId, selectedDate);
+    const mapped = await Promise.all(
+      secs.map(async (sec) => {
+        const tasks = await getTasksForSectionOnDate(sec.id, selectedDate);
+        const filtered = tasks.filter((t) => t.status === "out of stock");
+        const withSection = filtered.map((t) => ({
+          ...t,
+          section: {
             id: sec.id,
             section_name: sec.section_name,
             start_date: sec.start_date,
             end_date: sec.end_date,
-            tasks: tasksWithSection,
-          };
-        })
-      );
-
-      // c) optioneel: filter empty sections weg
-      setSections(merged.filter((sec) => sec.tasks.length > 0));
-    } catch (error: any) {
-      console.error("Error loading all tasks:", error);
-    } finally {
-      setLoading(false);
-    }
+          },
+        }));
+        return {
+          id: sec.id,
+          section_name: sec.section_name,
+          start_date: sec.start_date,
+          end_date: sec.end_date,
+          tasks: withSection,
+        };
+      })
+    );
+    setSections(mapped.filter((s) => s.tasks.length > 0));
+    setLoading(false);
   }
 
   /* 3) Handlers voor in‑progress / done / assign / etc. (zelfde als voor MyTasks) */
@@ -165,8 +156,8 @@ export default function AllTasksTabletView() {
     try {
       await updateTaskInstanceInProgress(selectedTask.id);
       refreshSingleStatus("in progress");
-    } catch (error) {
-      console.error(error);
+    } catch (e) {
+      console.error(e);
     }
   }
   async function handleSetActiveTask() {
@@ -220,6 +211,7 @@ export default function AllTasksTabletView() {
     if (!selectedTask) return;
     const updated = { ...selectedTask, status, assigned_to };
     setSelectedTask(updated);
+
     setSections((secs) =>
       secs.map((sec) =>
         sec.id !== updated.section.id
@@ -319,7 +311,7 @@ export default function AllTasksTabletView() {
   };
 
   /* De rest van de modal: */
-  const renderAllTasksModal = () => {
+  const renderOutOfStockModal = () => {
     if (!selectedTask) return null;
     return (
       <Modal
@@ -502,10 +494,10 @@ export default function AllTasksTabletView() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <AppText style={styles.headerText}>All</AppText>
+        <AppText style={styles.headerText}>Out of Stock</AppText>
       </View>
 
-      {/* FlatList met secties en taken (gefilterd op done/in progress) */}
+      {/* FlatList met secties en hun taken (gefilterd op activeProfile) */}
       <FlatList
         data={sections}
         keyExtractor={(sec) => sec.id}
@@ -548,7 +540,7 @@ export default function AllTasksTabletView() {
                     </AppText>
                   </Pressable>
 
-                  {/* 3) kleine assigned‑thumbnails */}
+                  {/* ③ kleine assigned‑thumbnails */}
                   <View style={styles.assignedBubbles}>
                     {task.assigned_to?.map((pid) => {
                       const prof = allProfiles.find((p) => p.id === pid);
@@ -570,13 +562,13 @@ export default function AllTasksTabletView() {
       />
 
       {/* --- Modal: Taakdetails --- */}
-      {renderAllTasksModal()}
+      {renderOutOfStockModal()}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: "#f6f6f6", paddingTop: 25 },
+  container: { backgroundColor: "#f6f6f6", paddingTop: 40 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: { alignItems: "center", marginBottom: 8 },
   headerText: { fontSize: 18, fontWeight: "bold" },
@@ -609,14 +601,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 0,
   },
-  modalContent: {
-    backgroundColor: "#fff",
-    padding: 16,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    paddingTop: 30,
-  },
-  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10, color: "#333" },
   modalTaskTitle: {
     fontSize: 18,
     fontWeight: "bold",
@@ -624,19 +608,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 10,
   },
-
-  input: { backgroundColor: "#f2f2f2", padding: 8, borderRadius: 6, marginBottom: 12 },
-  saveButton: {
-    backgroundColor: "#6C63FF",
-    padding: 10,
-    borderRadius: 6,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  saveButtonText: { color: "#fff", fontWeight: "bold" },
-  cancelButton: { padding: 10, alignItems: "center" },
-  cancelButtonText: { color: "#333", fontWeight: "bold" },
-
   // -- Assign to styling --
   assignTitle: {
     fontSize: 16,
@@ -671,10 +642,14 @@ const styles = StyleSheet.create({
   taskItemRow: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#fff",
     marginBottom: 6,
     padding: 10,
     borderRadius: 6,
-    backgroundColor: "#fff",
+    // backgroundColor: "#eee",
+    // marginBottom: 8,
+    // paddingVertical: 12,
+    // paddingHorizontal: 16,
   },
   taskStatusCircleContainer: {
     width: 1,
