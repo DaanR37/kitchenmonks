@@ -24,19 +24,6 @@ export default function OutOfStockScreen() {
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
 
-  const {
-    selectedTask,
-    showDetailsModal,
-    openModal,
-    closeModal,
-    handleToggleAssignTask,
-    handleSetDone,
-    handleSetInProgress,
-    handleSetActiveTask,
-    handleSetInactiveTask,
-    handleSetOutOfStock,
-  } = useTaskModal({ sections, setSections });
-
   /* Haal eerst de profielen op zodra de user beschikbaar is */
   useEffect(() => {
     async function loadProfiles() {
@@ -58,6 +45,19 @@ export default function OutOfStockScreen() {
     if (!user) return;
     loadData();
   }, [user, selectedDate]);
+
+  const {
+    selectedTask,
+    showDetailsModal,
+    openModal,
+    closeModal,
+    handleToggleAssignTask,
+    handleSetDone,
+    handleSetInProgress,
+    handleSetActiveTask,
+    handleSetInactiveTask,
+    handleSetOutOfStock,
+  } = useTaskModal({ sections, setSections });
 
   async function loadData() {
     setLoading(true);

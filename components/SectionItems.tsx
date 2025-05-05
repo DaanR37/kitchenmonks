@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, TouchableOpacity, FlatList } from "react-native";
+import { View, StyleSheet, TouchableOpacity, FlatList, useWindowDimensions } from "react-native";
 import AppText from "@/components/AppText";
 
 type Task = {
@@ -25,46 +25,45 @@ type Props = {
 };
 
 export default function SectionItems({ sections, onPressSection, activeTasksCountPerSection }: Props) {
+  const { width, height } = useWindowDimensions();
+  const isTabletLandscape = width > 800 && width > height;
+
   /* Render functie voor een enkele sectie-item */
   const renderItem = ({ item }: { item: SectionData }) => {
     /* Haal het aantal actieve taken voor deze sectie op via de meegegeven prop */
     const activeCount = activeTasksCountPerSection[item.id] ?? 0;
     return (
-      <TouchableOpacity style={styles.sectionItem} onPress={() => onPressSection(item.id)}>
-        <View style={styles.countCircle}>
-          <AppText style={styles.count}>{activeCount}</AppText>
+      <TouchableOpacity
+        style={[styles.sectionItem, isTabletLandscape && styles.sectionItemTablet]}
+        onPress={() => onPressSection(item.id)}
+      >
+        <View style={[styles.countCircle, isTabletLandscape && styles.countCircleTablet]}>
+          <AppText style={[styles.count, isTabletLandscape && styles.countTablet]}>{activeCount}</AppText>
         </View>
-        <AppText style={styles.sectionName}>{item.section_name}</AppText>
+        <AppText style={[styles.sectionName, isTabletLandscape && styles.sectionNameTablet]}>
+          {item.section_name}
+        </AppText>
       </TouchableOpacity>
     );
   };
 
   return (
     <FlatList
-      style={styles.container}
       data={sections}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
-      contentContainerStyle={{ paddingBottom: 16 }}
       keyboardShouldPersistTaps="always"
     />
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    // flex: 1,
-  },
   sectionItem: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 10,
     marginVertical: 6,
     borderRadius: 8,
-  },
-  sectionName: {
-    fontSize: 14,
-    color: "#333",
   },
   countCircle: {
     width: 28,
@@ -75,10 +74,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(0, 0, 0, 0.05)",
   },
-
   count: {
     fontSize: 14,
     fontWeight: "700",
     color: "#333",
+  },
+  sectionName: {
+    fontSize: 14,
+    color: "#333",
+  },
+
+  // -- Tablet view --
+  sectionItemTablet: {
+    // paddingHorizontal: 16,
+    marginVertical: 12,
+  },
+  countCircleTablet: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  countTablet: {
+    fontSize: 18,
+  },
+  sectionNameTablet: {
+    fontSize: 18,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, TouchableOpacity } from "react-native";
+import { View, StyleSheet, TouchableOpacity, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import CalendarModal from "./CalendarModal";
 import AppText from "@/components/AppText";
@@ -51,6 +51,8 @@ export function formatDateString(dateString: string): string {
 }
 
 export default function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) {
+  const { width, height } = useWindowDimensions();
+  const isTabletLandscape = width > 800 && width > height;
   const [calendarVisible, setCalendarVisible] = useState(false);
 
   let displayText = selectedDate;
@@ -76,27 +78,27 @@ export default function DateSelector({ selectedDate, onDateChange }: DateSelecto
   };
 
   return (
-    <View style={styles.dateContainer}>
-      <View style={styles.dateOval}>
+    <View style={[styles.dateContainer, isTabletLandscape && styles.dateContainerTablet]}>
+      <View style={[styles.dateOval, isTabletLandscape && styles.dateOvalTablet]}>
         {/* Vorige dag */}
         <TouchableOpacity
-          style={styles.chevronCircle}
+          style={[styles.chevronCircle, isTabletLandscape && styles.chevronCircleTablet]}
           onPress={() => onDateChange(getPrevDate(selectedDate))}
         >
-          <Ionicons style={styles.chevronIcon} name="chevron-back" size={12} />
+          <Ionicons style={[styles.chevronIcon, isTabletLandscape && styles.chevronIconTablet]} name="chevron-back" size={12} />
         </TouchableOpacity>
 
         {/* Tikken op de datumtekst opent de kalender-modal */}
         <TouchableOpacity onPress={handlePressDateText}>
-          <AppText style={styles.dateText}>{displayText}</AppText>
+          <AppText style={[styles.dateText, isTabletLandscape && styles.dateTextTablet]}>{displayText}</AppText>
         </TouchableOpacity>
 
         {/* Volgende dag */}
         <TouchableOpacity
-          style={styles.chevronCircle}
+          style={[styles.chevronCircle, isTabletLandscape && styles.chevronCircleTablet]}
           onPress={() => onDateChange(getNextDate(selectedDate))}
         >
-          <Ionicons style={styles.chevronIcon} name="chevron-forward" size={12} />
+          <Ionicons style={[styles.chevronIcon, isTabletLandscape && styles.chevronIconTablet]} name="chevron-forward" size={12} />
         </TouchableOpacity>
       </View>
 
@@ -137,7 +139,28 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 15,
-    marginHorizontal: 8,
+    // marginHorizontal: 8,
     // fontWeight: "600",
+  },
+
+  // -- Tablet view --
+  dateContainerTablet: {
+    // marginVertical: 12,
+  },
+  dateOvalTablet: {
+    padding: 7,
+  },
+  chevronCircleTablet: {
+    width: 28,
+    height: 28,
+    borderRadius: 14, 
+  },
+  chevronIconTablet: {
+    color: "#000",
+    fontSize: 16,
+  },
+  dateTextTablet: {
+    fontSize: 18,
+    marginHorizontal: 11,
   },
 });

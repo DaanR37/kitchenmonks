@@ -60,7 +60,7 @@ export default function HomeScreen() {
   const [newSectionEndDate, setNewSectionEndDate] = useState<string>(selectedDate);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [activeTab, setActiveTab] = useState("allTasks");
+  const [activeTab, setActiveTab] = useState<"allTasks" | "teamMep" | "myMep" | "outOfStock">("allTasks");
 
   /* Check of de user ingelogd is - anders redirect naar auth/login */
   useEffect(() => {
@@ -223,6 +223,7 @@ export default function HomeScreen() {
   const initials = generateInitials(activeProfile?.first_name, activeProfile?.last_name);
   const avatarColor = activeProfile ? getColorFromId(activeProfile.id) : "#6C63FF";
 
+  /* Deze modal ook reusable component maken */
   const renderAddSectionModal = () => {
     return (
       <Modal
@@ -304,39 +305,39 @@ export default function HomeScreen() {
     );
   }
 
+  const tabTitles = {
+    allTasks: "All",
+    teamMep: "Team MEP",
+    myMep: "My MEP",
+    outOfStock: "Out of Stock",
+  };
+  const activeTabTitle = tabTitles[activeTab];
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
-      <View style={[styles.container, isTabletLandscape && styles.rowLayout]}>
-        {/* Avatar ALTIJD rechtsboven in tablet-view */}
-        {isTabletLandscape && (
-          <View style={styles.avatarAbsoluteContainer}>
-            <TouchableOpacity onPress={() => router.push("/profile/menu")}>
-              {activeProfile ? (
-                <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
-                  <AppText style={styles.avatarText}>{initials}</AppText>
-                </View>
-              ) : (
-                <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatar} />
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+      <View style={[styles.container, isTabletLandscape && styles.containerTablet]}>
         {/* ----------- Linker Kolom (alleen zichtbaar als niet collapsed) ----------- */}
         {!isTabletLandscape || !isSidebarCollapsed ? (
           <View style={styles.leftColumn}>
             {/* Header */}
-            <View style={styles.header}>
-              <Image source={require("../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
+            <View style={[styles.header, isTabletLandscape && styles.headerTablet]}>
+              <Image
+                source={require("../assets/images/KITCHENMONKSLOGOX.png")}
+                style={[styles.logo, isTabletLandscape && styles.logoTablet]}
+              />
               <DateSelector selectedDate={selectedDate} onDateChange={handleDateChange} />
 
               {/* Menu toggle icoon (alleen tablet) */}
               {isTabletLandscape && (
-                <TouchableOpacity onPress={() => setSidebarCollapsed((prev) => !prev)}>
-                  <Ionicons name="menu" size={20} color="#333" />
+                <TouchableOpacity
+                  onPress={() => setSidebarCollapsed((prev) => !prev)}
+                  style={styles.menuToggle}
+                >
+                  <Ionicons name="menu" size={24} color="#333" />
                 </TouchableOpacity>
               )}
 
@@ -354,7 +355,7 @@ export default function HomeScreen() {
               )}
             </View>
 
-            {/* Stats-sectie */}
+            {/* StatsSection voor mobiel EN in de sidebar op tablet view */}
             <View style={{ width: "100%" }}>
               <StatsSection
                 allPercentage={allPercentage}
@@ -362,17 +363,23 @@ export default function HomeScreen() {
                 myMepCount={myMepCount}
                 outOfStockCount={outOfStockCount}
                 isTablet={isTabletLandscape}
-                onTabSelect={setActiveTab}
+                activeTab={activeTab}
+                onTabSelect={(tab) => setActiveTab(tab as "allTasks" | "teamMep" | "myMep" | "outOfStock")}
               />
             </View>
 
-            {/* SectionItems alleen op mobiel of in sidebar */}
-            <View style={styles.listContainer}>
-              <TouchableOpacity style={styles.addSectionButton} onPress={() => setShowAddModal(true)}>
-                <View style={styles.plusCircle}>
-                  <Ionicons name="add" size={14} style={{ opacity: 0.8, color: "#333" }} />
+            {/* SectionItems voor mobiel EN in de sidebar op tablet view */}
+            <View style={[styles.listContainer, isTabletLandscape && styles.listContainerTablet]}>
+              <TouchableOpacity
+                style={[styles.addSectionButton, isTabletLandscape && styles.addSectionButtonTablet]}
+                onPress={() => setShowAddModal(true)}
+              >
+                <View style={[styles.plusCircle, isTabletLandscape && styles.plusCircleTablet]}>
+                  <Ionicons name="add" size={15} style={{ opacity: 0.5, color: "#333" }} />
                 </View>
-                <AppText style={styles.addSectionText}>Voeg menu-item toe</AppText>
+                <AppText style={[styles.addSectionText, isTabletLandscape && styles.addSectionTextTablet]}>
+                  Voeg menu-item toe
+                </AppText>
               </TouchableOpacity>
 
               <SectionItems
@@ -389,14 +396,30 @@ export default function HomeScreen() {
         {/* ----------- Rechter Kolom (alleen op tablet) ----------- */}
         {isTabletLandscape && (
           <View style={styles.rightColumn}>
-            {/* Rechter header: avatar en toggle */}
+            {/* Rechter header */}
             <View style={styles.rightColumnHeader}>
-              {/* Menu toggle icoon als sidebar collapsed is */}
-              {isSidebarCollapsed && (
-                <TouchableOpacity onPress={() => setSidebarCollapsed(false)}>
-                  <Ionicons name="menu" size={20} color="#333" />
-                </TouchableOpacity>
-              )}
+              <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                {/* Menu toggle icoon alleen als sidebar collapsed is */}
+                {isSidebarCollapsed && (
+                  <TouchableOpacity onPress={() => setSidebarCollapsed(false)}>
+                    <Ionicons name="menu" size={24} color="#333" />
+                  </TouchableOpacity>
+                )}
+
+                {/* Titel altijd zichtbaar links in de rij */}
+                <AppText style={styles.headerText}>{activeTabTitle}</AppText>
+              </View>
+
+              {/* Avatar ALTIJD rechtsboven in tablet-view */}
+              <TouchableOpacity onPress={() => router.push("/profile/menu")}>
+                {activeProfile ? (
+                  <View style={[styles.avatarCircleTablet, { backgroundColor: avatarColor }]}>
+                    <AppText style={styles.avatarTextTablet}>{initials}</AppText>
+                  </View>
+                ) : (
+                  <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatarTablet} />
+                )}
+              </TouchableOpacity>
             </View>
 
             {/* Dynamische tab-content */}
@@ -414,51 +437,23 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fafafa",
-    paddingHorizontal: 16,
+    paddingHorizontal: 22,
     paddingTop: 25,
+    backgroundColor: "#f6f6f6",
   },
-  avatarAbsoluteContainer: {
-    position: "absolute",
-    top: 20,
-    right: 20,
-    zIndex: 10,
+  containerTablet: {
+    flexDirection: "row",
+    paddingHorizontal: 40,
+    paddingTop: 35,
+    backgroundColor: "#f6f6f6",
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  logo: {
-    width: 32,
-    height: 32,
-    resizeMode: "contain",
-  },
-  avatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    resizeMode: "contain",
-  },
 
-  // -- Modal styling --
+  // -- Modal styling  -> Modal moet ook in een reusable component & styling moet gescheiden zijn van beide views --
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.3)",
@@ -512,15 +507,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: { padding: 10, alignItems: "center" },
   cancelButtonText: { color: "#666" },
-  listContainer: {
-    // flex: 1,
-    paddingVertical: 10,
-    borderRadius: 18,
-    borderWidth: 0.5,
-    borderColor: "rgba(0, 0, 0, 0.1)",
-    backgroundColor: "#ffffff",
-    height: "auto",
-  },
+
   addSectionButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -534,7 +521,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    backgroundColor: "rgba(0, 0, 0, 0.04)",
   },
   addSectionText: {
     flex: 1,
@@ -542,20 +529,112 @@ const styles = StyleSheet.create({
     color: "#666",
     opacity: 0.8,
   },
-  rowLayout: {
-    flexDirection: "row",
-  },
+
+  // -- Linker Kolom styling (mobiel) --
   leftColumn: {
     flex: 0.5,
   },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    // marginVertical: 14,
+  },
+  headerTablet: {
+    // marginVertical: 24,
+  },
+
+  logo: {
+    width: 32,
+    height: 32,
+    resizeMode: "contain",
+  },
+  avatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    resizeMode: "contain",
+  },
+  menuToggle: {
+    padding: 10,
+  },
+  listContainer: {
+    paddingVertical: 10,
+    paddingHorizontal: 5,
+    borderRadius: 18,
+    borderWidth: 0.5,
+    height: "auto",
+    borderColor: "rgba(0, 0, 0, 0.1)",
+    backgroundColor: "#ffffff",
+  },
+
+  // -- Rechter Kolom styling --
   rightColumn: {
     flex: 1,
     backgroundColor: "#f6f6f6",
   },
   rightColumnHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    // marginVertical: 24,
+  },
+
+  headerText: {
+    fontSize: 23,
+    fontWeight: "bold",
+    marginLeft: 24,
+  },
+  logoTablet: {
+    width: 40,
+    height: 40,
+  },
+  avatarCircleTablet: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarTextTablet: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  avatarTablet: {
+    width: 40,
+    height: 40,
+    resizeMode: "contain",
+  },
+  listContainerTablet: {
+    width: "100%",
+    height: "auto",
+    paddingVertical: 12.5,
+  },
+  addSectionButtonTablet: {
+    marginVertical: 12,
+  },
+  plusCircleTablet: {
+    // marginRight: 12.5,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  addSectionTextTablet: {
+    fontSize: 18,
+    color: "#666",
+    opacity: 0.8,
   },
 });

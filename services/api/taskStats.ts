@@ -46,9 +46,8 @@ export async function fetchAllDonePercentage(date: string): Promise<number> {
 export async function fetchMyTasksCount(profileId: string, date: string): Promise<number> {
   const { data, count, error } = await supabase
     .from("task_instances")
-    /* Vraag alleen het aantal op, zonder alle data op te halen */
     .select("id", { count: "exact", head: true })
-    .eq("status", "active")
+    .in("status", ["active", "in progress"])
     .contains("assigned_to", [profileId])
     .eq("date", date);
   if (error) {

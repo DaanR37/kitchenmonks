@@ -24,19 +24,7 @@ export default function AllTasksScreen() {
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
 
-  const {
-    selectedTask,
-    showDetailsModal,
-    openModal,
-    closeModal,
-    handleToggleAssignTask,
-    handleSetDone,
-    handleSetInProgress,
-    handleSetActiveTask,
-    handleSetInactiveTask,
-    handleSetOutOfStock,
-  } = useTaskModal({ sections, setSections });
-
+  
   /* Haal eerst de profielen op zodra de user beschikbaar is */
   useEffect(() => {
     async function loadProfiles() {
@@ -60,6 +48,20 @@ export default function AllTasksScreen() {
     if (!kitchenId) return;
     loadData(kitchenId);
   }, [user, selectedDate]);
+
+  const {
+    selectedTask,
+    showDetailsModal,
+    openModal,
+    closeModal,
+    handleToggleAssignTask,
+    handleSetDone,
+    handleSetInProgress,
+    handleSetActiveTask,
+    handleSetInactiveTask,
+    handleSetOutOfStock,
+  } = useTaskModal({ sections, setSections });
+
 
   /* 2) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
   async function loadData(kitchenId: string) {

@@ -24,19 +24,6 @@ export default function TeamMepScreen() {
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
 
-  const {
-    selectedTask,
-    showDetailsModal,
-    openModal,
-    closeModal,
-    handleToggleAssignTask,
-    handleSetDone,
-    handleSetInProgress,
-    handleSetActiveTask,
-    handleSetInactiveTask,
-    handleSetOutOfStock,
-  } = useTaskModal({ sections, setSections });
-
   /* Haal eerst de profielen op zodra de user beschikbaar is */
   useEffect(() => {
     async function loadProfiles() {
@@ -57,6 +44,19 @@ export default function TeamMepScreen() {
   useEffect(() => {
     loadData();
   }, [selectedDate]);
+
+  const {
+    selectedTask,
+    showDetailsModal,
+    openModal,
+    closeModal,
+    handleToggleAssignTask,
+    handleSetDone,
+    handleSetInProgress,
+    handleSetActiveTask,
+    handleSetInactiveTask,
+    handleSetOutOfStock,
+  } = useTaskModal({ sections, setSections });
 
   /*
     loadData:
