@@ -12,21 +12,21 @@ import {
   Platform,
   Pressable,
   useWindowDimensions,
+  ScrollView,
 } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { ProfileContext } from "@/services/ProfileContext";
 import { DateContext } from "@/services/DateContext";
 import { fetchSections, createSection } from "@/services/api/sections";
 import DateSelector, { formatDateString } from "@/components/DateSelector";
-// import SearchBar from "@/components/SearchBar";
 import StatsSection from "@/components/StatsSection";
 import SectionItems, { SectionData } from "@/components/SectionItems";
 import {
-  fetchMyTasksCount,
   fetchAllDonePercentage,
-  fetchActiveCountPerSection,
   fetchActiveTasksCount,
+  fetchMyTasksCount,
   fetchOutOfStockTasksCount,
+  fetchActiveCountPerSection,
 } from "@/services/api/taskStats";
 import { supabase } from "@/services/supabaseClient";
 import CalendarModal from "@/components/CalendarModal";
@@ -36,6 +36,8 @@ import AllTasksTabletView from "@/components/AllTasksTabletView";
 import TeamMepTabletView from "@/components/TeamMepTabletView";
 import MyMepTabletView from "@/components/MyMepTabletView";
 import OutOfStockTabletView from "@/components/OutOfStockTabletView";
+import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
+import NoStatusTabletView from "@/components/NoStatusTabletView";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -43,7 +45,7 @@ export default function HomeScreen() {
   const isTabletLandscape = width > 800 && width > height;
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { user, loading } = useContext(AuthContext);
-  const { activeProfile, setActiveProfile } = useContext(ProfileContext);
+  const { activeProfile } = useContext(ProfileContext);
   const { selectedDate, setSelectedDate } = useContext(DateContext);
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loadingSections, setLoadingSections] = useState(true);
@@ -51,6 +53,13 @@ export default function HomeScreen() {
   const [teamMepCount, setTeamMepCount] = useState(0);
   const [allPercentage, setAllPercentage] = useState(0);
   const [outOfStockCount, setOutOfStockCount] = useState(0);
+  const [noStatusCount, setNoStatusCount] = useState(0);
+
+  const [hasAllData, setHasAllData] = useState(false);
+  const [hasMyMepData, setHasMyMepData] = useState(false);
+  const [hasTeamMepData, setHasTeamMepData] = useState(false);
+  const [hasOutOfStockData, setHasOutOfStockData] = useState(false);
+  const [hasNoStatusData, setHasNoStatusData] = useState(false);
   const [activeTasksCountPerSection, setActiveTasksCountPerSection] = useState<Record<string, number>>({});
 
   /* State voor Modal -> nieuwe sectie toevoegen */
@@ -60,7 +69,9 @@ export default function HomeScreen() {
   const [newSectionEndDate, setNewSectionEndDate] = useState<string>(selectedDate);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [activeTab, setActiveTab] = useState<"allTasks" | "teamMep" | "myMep" | "outOfStock">("allTasks");
+  const [activeTab, setActiveTab] = useState<"allTasks" | "teamMep" | "myMep" | "outOfStock" | "noStatus">(
+    "allTasks"
+  );
 
   /* Check of de user ingelogd is - anders redirect naar auth/login */
   useEffect(() => {
@@ -69,74 +80,117 @@ export default function HomeScreen() {
     }
   }, [loading, user]);
 
-  /* Haal de secties op en update de tellers */
+  /* Initial load of bij datum/profielwissel */
   useEffect(() => {
-    if (!user) return;
-    const kitchenId = user.user_metadata?.kitchen_id;
-    if (kitchenId && selectedDate) {
-      loadSections(kitchenId, selectedDate);
-      updateStats(); /* stats voor MyTasks, Team MEP, Out of Stock, etc. */
+    console.log("▶ useEffect [user, activeProfile, selectedDate] triggered");
+    if (user && selectedDate) {
+      loadSectionsWithTasksAndUpdateStats();
     }
-  }, [user, selectedDate]);
+  }, [user, activeProfile, selectedDate]);
 
-  /* Update beide tellers bij initial load en datum wisseling */
+  /* Realtime listener → alleen aanmaken bij login */
   useEffect(() => {
-    updateStats();
-  }, [activeProfile, selectedDate]);
-
-  /* Real-time subscription instellen voor task_instances tabel */
-  useEffect(() => {
-    if (!user || !activeProfile || !selectedDate) return;
+    console.log("▶ Supabase subscription created");
+    if (!user) return;
 
     const channel = supabase
       .channel("taskInstancesChannel")
-      .on(
-        "postgres_changes",
-        {
-          event: "*", // luister naar INSERT, UPDATE, DELETE
-          schema: "public",
-          table: "task_instances",
-        },
-        (payload: any) => {
-          console.log("Realtime update (task_instances):", payload);
-          updateStats();
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_instances" }, (payload: any) => {
+        console.log("▶ Supabase realtime payload", payload);
+
+        /* Voorkom loop: alleen update als payload bij geselecteerde datum hoort */
+        if (payload?.new?.date === selectedDate) {
+          console.log("▶ Supabase triggers update");
+          loadSectionsWithTasksAndUpdateStats();
         }
-      )
+      })
       .subscribe();
 
-    /* Cleanup bij unmount */
     return () => {
+      console.log("▶ Supabase channel unsubscribed");
       channel.unsubscribe();
     };
-  }, [user, activeProfile, selectedDate]);
+  }, [user, selectedDate]);
 
-  /* Functie: Laadt alle secties voor de gegeven kitchen_id
-  Opmerking: je kunt hier eventueel de datum als filter meegeven als je secties datumgebonden wilt maken,
-  maar in dit voorbeeld haal je alle secties op en filter je ze later in de UI op geldigheid via start- en einddatum. */
-  async function loadSections(kitchenId: string, selectedDate: string) {
+  async function loadSectionsWithTasksAndUpdateStats() {
+    if (!user) return;
+    const kitchenId = user.user_metadata?.kitchen_id;
+    if (!kitchenId) return;
+
+    // console.log("▶ loadSectionsWithTasksAndUpdateStats START");
     setLoadingSections(true);
     try {
-      /* 1) Haal de secties op die geldig zijn voor de geselecteerde datum */
-      const data = await fetchSections(kitchenId, selectedDate);
-      console.log("data", data);
+      // 1️⃣ Haal secties op
+      const secs = await fetchSections(kitchenId, selectedDate);
+      // console.log("▶ fetched sections");
 
-      /* 2) Map de ruwe data naar SectionData[] zoals jouw app verwacht */
-      const mappedSections: SectionData[] = data.map((section: any) => ({
-        id: section.id,
-        section_name: section.section_name ?? section.name,
-        start_date: section.start_date,
-        end_date: section.end_date,
-        task_templates: section.task_templates || [],
-      }));
+      // 2️⃣ Haal taken per sectie op en verrijk met section-info
+      const mergedSections: SectionData[] = await Promise.all(
+        secs.map(async (section: any) => {
+          const tasks = await getTasksForSectionOnDate(section.id, selectedDate);
+          console.log("▶ fetched stats");
+          return {
+            id: section.id,
+            section_name: section.section_name ?? section.name,
+            start_date: section.start_date,
+            end_date: section.end_date,
+            task_templates: tasks,
+          };
+        })
+      );
 
-      /* 3) Update de lokale state */
-      setSections(mappedSections);
+      const allTasks = mergedSections.flatMap((sec) => sec.task_templates);
+
+      const hasAll = allTasks.length > 0;
+      setHasAllData(hasAll);
+
+      const hasMyMep = allTasks.some(
+        (task) => activeProfile?.id && task.assigned_to?.includes(activeProfile.id)
+      );
+      setHasMyMepData(hasMyMep);
+
+      const hasTeamMep = allTasks.length > 0; // of specifieker als je wilt
+      setHasTeamMepData(hasTeamMep);
+
+      const hasOutOfStock = allTasks.some((task) => task.status === "out of stock");
+      setHasOutOfStockData(hasOutOfStock);
+
+      const hasNoStatus = allTasks.some((task) => task.status === "inactive");
+      setHasNoStatusData(hasNoStatus);
+
+      // 3️⃣ Update sections in state (voor weergave in SectionItems)
+      setSections(mergedSections);
+      // console.log("▶ setting sections + stats state");
+
+      // 4️⃣ Haal statistieken direct vanuit Supabase (zoals helpers zijn ontworpen)
+      const allPct = await fetchAllDonePercentage(selectedDate, kitchenId);
+      setAllPercentage(allPct);
+
+      if (activeProfile) {
+        const myMepCount = await fetchMyTasksCount(activeProfile.id, selectedDate, kitchenId);
+        setMyMepCount(myMepCount);
+      }
+
+      const teamCount = await fetchActiveTasksCount(selectedDate, kitchenId);
+      setTeamMepCount(teamCount);
+
+      const outStockCount = await fetchOutOfStockTasksCount(selectedDate, kitchenId);
+      setOutOfStockCount(outStockCount);
+
+      const noStatusCount = allTasks.filter((task) => task.status === "inactive").length;
+      setNoStatusCount(noStatusCount);
+
+      const activeCountPerSection = await fetchActiveCountPerSection(kitchenId, selectedDate);
+      setActiveTasksCountPerSection(activeCountPerSection);
+
+      // console.log("▶ stats state set");
     } catch (error: any) {
-      console.error("Error loading sections:", error.message);
+      console.error("Error loading sections + stats:", error);
     } finally {
       setLoadingSections(false);
     }
   }
+
   /* Creëer een nieuwe sectie met de ingevoerde naam en de start- en einddatum */
   async function handleCreateSection() {
     if (!user) return;
@@ -167,31 +221,6 @@ export default function HomeScreen() {
     } catch (error: any) {
       console.error("Error creating section:", error.message);
       alert("Er ging iets mis bij het aanmaken van de sectie");
-    }
-  }
-  /* Update de StatsSection counts & activeTasksCountPerSection */
-  async function updateStats() {
-    if (!user) return;
-    const kitchenId = user.user_metadata?.kitchen_id;
-    if (!kitchenId) return;
-
-    const allPercentage = await fetchAllDonePercentage(selectedDate);
-    setAllPercentage(allPercentage);
-
-    if (activeProfile) {
-      const myMepCount = await fetchMyTasksCount(activeProfile.id, selectedDate);
-      setMyMepCount(myMepCount);
-    }
-
-    const activeCountTeamMep = await fetchActiveTasksCount(selectedDate);
-    setTeamMepCount(activeCountTeamMep);
-
-    const outOfStockCount = await fetchOutOfStockTasksCount(selectedDate);
-    setOutOfStockCount(outOfStockCount);
-
-    if (kitchenId) {
-      const activeCount = await fetchActiveCountPerSection(kitchenId, selectedDate);
-      setActiveTasksCountPerSection(activeCount);
     }
   }
 
@@ -232,66 +261,72 @@ export default function HomeScreen() {
         animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        {/* Buitenste laag die de achtergrond dimt */}
-        <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <AppText style={styles.modalTitle}>Nieuw menu-item</AppText>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+        >
+          {/* Buitenste laag die de achtergrond dimt */}
+          <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
+            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+              <AppText style={styles.modalTitle}>Nieuw menu-item</AppText>
 
-            <TextInput
-              style={styles.input}
-              placeholder="menu-item"
-              value={newSectionName}
-              onChangeText={setNewSectionName}
-              autoCorrect={false}
-            />
+              <TextInput
+                style={styles.input}
+                placeholder="menu-item"
+                value={newSectionName}
+                onChangeText={setNewSectionName}
+                autoCorrect={false}
+              />
 
-            {/* Kiezen van startdatum */}
-            <AppText style={styles.label}>Startdatum</AppText>
-            <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowStartDatePicker(true)}>
-              <AppText style={styles.datePickerText}>{formatDateString(newSectionStartDate)}</AppText>
-            </TouchableOpacity>
+              {/* Kiezen van startdatum */}
+              <AppText style={styles.label}>Startdatum</AppText>
+              <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowStartDatePicker(true)}>
+                <AppText style={styles.datePickerText}>{formatDateString(newSectionStartDate)}</AppText>
+              </TouchableOpacity>
 
-            {/* Kiezen van einddatum */}
-            <AppText style={styles.label}>Einddatum</AppText>
-            <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowEndDatePicker(true)}>
-              <AppText style={styles.datePickerText}>{formatDateString(newSectionEndDate)}</AppText>
-            </TouchableOpacity>
+              {/* Kiezen van einddatum */}
+              <AppText style={styles.label}>Einddatum</AppText>
+              <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowEndDatePicker(true)}>
+                <AppText style={styles.datePickerText}>{formatDateString(newSectionEndDate)}</AppText>
+              </TouchableOpacity>
 
-            {/* Opslaan */}
-            <TouchableOpacity style={styles.saveButton} onPress={handleCreateSection}>
-              <AppText style={styles.saveButtonText}>Opslaan</AppText>
-            </TouchableOpacity>
+              {/* Opslaan */}
+              <TouchableOpacity style={styles.saveButton} onPress={handleCreateSection}>
+                <AppText style={styles.saveButtonText}>Opslaan</AppText>
+              </TouchableOpacity>
 
-            {/* Annuleren */}
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
-              <AppText style={styles.cancelButtonText}>Annuleren</AppText>
-            </TouchableOpacity>
+              {/* Annuleren */}
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
+                <AppText style={styles.cancelButtonText}>Annuleren</AppText>
+              </TouchableOpacity>
 
-            {/* Startdatum CalendarModal */}
-            <CalendarModal
-              visible={showStartDatePicker}
-              selectedDate={newSectionStartDate}
-              onClose={() => setShowStartDatePicker(false)}
-              onSelectDate={(date) => {
-                setNewSectionStartDate(date);
-                if (!newSectionEndDate)
-                  setNewSectionEndDate(date); /* Als einddatum nog leeg is, zet gelijk */
-                setShowStartDatePicker(false);
-              }}
-            />
+              {/* Startdatum CalendarModal */}
+              <CalendarModal
+                visible={showStartDatePicker}
+                selectedDate={newSectionStartDate}
+                onClose={() => setShowStartDatePicker(false)}
+                onSelectDate={(date) => {
+                  setNewSectionStartDate(date);
+                  if (!newSectionEndDate)
+                    setNewSectionEndDate(date); /* Als einddatum nog leeg is, zet gelijk */
+                  setShowStartDatePicker(false);
+                }}
+              />
 
-            {/* Einddatum CalendarModal */}
-            <CalendarModal
-              visible={showEndDatePicker}
-              selectedDate={newSectionEndDate}
-              onClose={() => setShowEndDatePicker(false)}
-              onSelectDate={(date) => {
-                setNewSectionEndDate(date);
-                setShowEndDatePicker(false);
-              }}
-            />
+              {/* Einddatum CalendarModal */}
+              <CalendarModal
+                visible={showEndDatePicker}
+                selectedDate={newSectionEndDate}
+                onClose={() => setShowEndDatePicker(false)}
+                onSelectDate={(date) => {
+                  setNewSectionEndDate(date);
+                  setShowEndDatePicker(false);
+                }}
+              />
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     );
   };
@@ -310,136 +345,143 @@ export default function HomeScreen() {
     teamMep: "Team MEP",
     myMep: "My MEP",
     outOfStock: "Out of Stock",
+    noStatus: "No Status",
   };
   const activeTabTitle = tabTitles[activeTab];
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
-    >
-      <View style={[styles.container, isTabletLandscape && styles.containerTablet]}>
-        {/* ----------- Linker Kolom (alleen zichtbaar als niet collapsed) ----------- */}
-        {!isTabletLandscape || !isSidebarCollapsed ? (
-          <View style={styles.leftColumn}>
-            {/* Header */}
-            <View style={[styles.header, isTabletLandscape && styles.headerTablet]}>
-              <Image
-                source={require("../assets/images/KITCHENMONKSLOGOX.png")}
-                style={[styles.logo, isTabletLandscape && styles.logoTablet]}
-              />
-              <DateSelector selectedDate={selectedDate} onDateChange={handleDateChange} />
+    <View style={[styles.container, isTabletLandscape && styles.containerTablet]}>
+      {/* ----------- Linker Kolom (alleen zichtbaar als niet collapsed) ----------- */}
+      {!isTabletLandscape || !isSidebarCollapsed ? (
+        <View style={styles.leftColumn}>
+          {/* Header */}
+          <View style={[styles.header, isTabletLandscape && styles.headerTablet]}>
+            <Image
+              source={require("../assets/images/KITCHENMONKSLOGOX.png")}
+              style={[styles.logo, isTabletLandscape && styles.logoTablet]}
+            />
+            <DateSelector selectedDate={selectedDate} onDateChange={handleDateChange} />
 
-              {/* Menu toggle icoon (alleen tablet) */}
-              {isTabletLandscape && (
-                <TouchableOpacity
-                  onPress={() => setSidebarCollapsed((prev) => !prev)}
-                  style={styles.menuToggle}
-                >
+            {/* Menu toggle icoon (alleen tablet) */}
+            {isTabletLandscape && (
+              <TouchableOpacity
+                onPress={() => setSidebarCollapsed((prev) => !prev)}
+                style={styles.menuToggle}
+              >
+                <Ionicons name="menu" size={24} color="#333" />
+              </TouchableOpacity>
+            )}
+
+            {/* Avatar (alleen mobiel zichtbaar in linker header) */}
+            {!isTabletLandscape && (
+              <TouchableOpacity onPress={() => router.push("/profile/menu")}>
+                {activeProfile ? (
+                  <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
+                    <AppText style={styles.avatarText}>{initials}</AppText>
+                  </View>
+                ) : (
+                  <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatar} />
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* StatsSection voor mobiel EN in de sidebar op tablet view */}
+          <View style={{ width: "100%" }}>
+            <StatsSection
+              allPercentage={allPercentage}
+              teamMepCount={teamMepCount}
+              myMepCount={myMepCount}
+              outOfStockCount={outOfStockCount}
+              noStatusCount={noStatusCount}
+              hasMyMepData={hasMyMepData}
+              hasTeamMepData={hasTeamMepData}
+              hasOutOfStockData={hasOutOfStockData}
+              hasNoStatusData={hasNoStatusData}
+              hasAllData={hasAllData}
+              isTablet={isTabletLandscape}
+              activeTab={activeTab}
+              onTabSelect={(tab) =>
+                setActiveTab(tab as "allTasks" | "teamMep" | "myMep" | "outOfStock" | "noStatus")
+              }
+            />
+          </View>
+
+          {/* SectionItems voor mobiel EN in de sidebar op tablet view */}
+          <View style={[styles.listContainer, isTabletLandscape && styles.listContainerTablet]}>
+            <TouchableOpacity
+              style={[styles.addSectionButton, isTabletLandscape && styles.addSectionButtonTablet]}
+              onPress={() => setShowAddModal(true)}
+            >
+              <View style={[styles.plusCircle, isTabletLandscape && styles.plusCircleTablet]}>
+                <Ionicons name="add" size={15} style={{ opacity: 0.5, color: "#333" }} />
+              </View>
+              <AppText style={[styles.addSectionText, isTabletLandscape && styles.addSectionTextTablet]}>
+                Voeg menu-item toe
+              </AppText>
+            </TouchableOpacity>
+
+            <SectionItems
+              sections={sections}
+              onPressSection={handlePressSection}
+              activeTasksCountPerSection={activeTasksCountPerSection}
+            />
+          </View>
+
+          {renderAddSectionModal()}
+        </View>
+      ) : null}
+
+      {/* ----------- Rechter Kolom (alleen op tablet) ----------- */}
+      {isTabletLandscape && (
+        <View style={styles.rightColumn}>
+          {/* Rechter header */}
+          <View style={styles.rightColumnHeader}>
+            <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+              {/* Menu toggle icoon alleen als sidebar collapsed is */}
+              {isSidebarCollapsed && (
+                <TouchableOpacity onPress={() => setSidebarCollapsed(false)}>
                   <Ionicons name="menu" size={24} color="#333" />
                 </TouchableOpacity>
               )}
 
-              {/* Avatar (alleen mobiel zichtbaar in linker header) */}
-              {!isTabletLandscape && (
-                <TouchableOpacity onPress={() => router.push("/profile/menu")}>
-                  {activeProfile ? (
-                    <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
-                      <AppText style={styles.avatarText}>{initials}</AppText>
-                    </View>
-                  ) : (
-                    <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatar} />
-                  )}
-                </TouchableOpacity>
-              )}
+              {/* Titel altijd zichtbaar links in de rij */}
+              <AppText style={styles.headerText}>{activeTabTitle}</AppText>
             </View>
 
-            {/* StatsSection voor mobiel EN in de sidebar op tablet view */}
-            <View style={{ width: "100%" }}>
-              <StatsSection
-                allPercentage={allPercentage}
-                teamMepCount={teamMepCount}
-                myMepCount={myMepCount}
-                outOfStockCount={outOfStockCount}
-                isTablet={isTabletLandscape}
-                activeTab={activeTab}
-                onTabSelect={(tab) => setActiveTab(tab as "allTasks" | "teamMep" | "myMep" | "outOfStock")}
-              />
-            </View>
-
-            {/* SectionItems voor mobiel EN in de sidebar op tablet view */}
-            <View style={[styles.listContainer, isTabletLandscape && styles.listContainerTablet]}>
-              <TouchableOpacity
-                style={[styles.addSectionButton, isTabletLandscape && styles.addSectionButtonTablet]}
-                onPress={() => setShowAddModal(true)}
-              >
-                <View style={[styles.plusCircle, isTabletLandscape && styles.plusCircleTablet]}>
-                  <Ionicons name="add" size={15} style={{ opacity: 0.5, color: "#333" }} />
+            {/* Avatar ALTIJD rechtsboven in tablet-view */}
+            <TouchableOpacity onPress={() => router.push("/profile/menu")}>
+              {activeProfile ? (
+                <View style={[styles.avatarCircleTablet, { backgroundColor: avatarColor }]}>
+                  <AppText style={styles.avatarTextTablet}>{initials}</AppText>
                 </View>
-                <AppText style={[styles.addSectionText, isTabletLandscape && styles.addSectionTextTablet]}>
-                  Voeg menu-item toe
-                </AppText>
-              </TouchableOpacity>
-
-              <SectionItems
-                sections={sections}
-                onPressSection={handlePressSection}
-                activeTasksCountPerSection={activeTasksCountPerSection}
-              />
-            </View>
-
-            {renderAddSectionModal()}
+              ) : (
+                <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatarTablet} />
+              )}
+            </TouchableOpacity>
           </View>
-        ) : null}
 
-        {/* ----------- Rechter Kolom (alleen op tablet) ----------- */}
-        {isTabletLandscape && (
-          <View style={styles.rightColumn}>
-            {/* Rechter header */}
-            <View style={styles.rightColumnHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-                {/* Menu toggle icoon alleen als sidebar collapsed is */}
-                {isSidebarCollapsed && (
-                  <TouchableOpacity onPress={() => setSidebarCollapsed(false)}>
-                    <Ionicons name="menu" size={24} color="#333" />
-                  </TouchableOpacity>
-                )}
-
-                {/* Titel altijd zichtbaar links in de rij */}
-                <AppText style={styles.headerText}>{activeTabTitle}</AppText>
-              </View>
-
-              {/* Avatar ALTIJD rechtsboven in tablet-view */}
-              <TouchableOpacity onPress={() => router.push("/profile/menu")}>
-                {activeProfile ? (
-                  <View style={[styles.avatarCircleTablet, { backgroundColor: avatarColor }]}>
-                    <AppText style={styles.avatarTextTablet}>{initials}</AppText>
-                  </View>
-                ) : (
-                  <Image source={require("../assets/images/ExampleAvatar.png")} style={styles.avatarTablet} />
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {/* Dynamische tab-content */}
-            {activeTab === "allTasks" && <AllTasksTabletView />}
-            {activeTab === "teamMep" && <TeamMepTabletView />}
-            {activeTab === "myMep" && <MyMepTabletView />}
-            {activeTab === "outOfStock" && <OutOfStockTabletView />}
-          </View>
-        )}
-      </View>
-    </KeyboardAvoidingView>
+          {/* Dynamische tab-content */}
+          {activeTab === "allTasks" && <AllTasksTabletView />}
+          {activeTab === "teamMep" && <TeamMepTabletView />}
+          {activeTab === "myMep" && <MyMepTabletView />}
+          {activeTab === "outOfStock" && <OutOfStockTabletView />}
+          {activeTab === "noStatus" && <NoStatusTabletView />}
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 22,
-    paddingTop: 25,
     backgroundColor: "#f6f6f6",
+    paddingHorizontal: 22,
+    paddingVertical: Platform.select({
+      ios: 60,
+      android: 35,
+    }),
   },
   containerTablet: {
     flexDirection: "row",
@@ -538,7 +580,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    // marginVertical: 14,
+    paddingHorizontal: Platform.select({
+      ios: 10,
+      android: 5,
+    }),
+    paddingVertical: Platform.select({
+      ios: 10,
+    }),
+    marginTop: Platform.select({
+      ios: 10,
+    }),
   },
   headerTablet: {
     // marginVertical: 24,
@@ -550,9 +601,18 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
   },
   avatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: Platform.select({
+      ios: 34,
+      android: 30,
+    }),
+    height: Platform.select({
+      ios: 34,
+      android: 30,
+    }),
+    borderRadius: Platform.select({
+      ios: 17,
+      android: 15,
+    }),
     justifyContent: "center",
     alignItems: "center",
   },

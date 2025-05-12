@@ -1,133 +1,191 @@
 import { supabase } from "@/services/supabaseClient";
 
-/**
- * Haal het percentage “done” op van alle taken in de hele keuken (ongeacht assigned_to).
- * We gaan er even vanuit dat “actief” gedefinieerd is als status in ["active", "in progress"].
- *
- * returnedPercentage = ( #done / (#done + #actief ) ) * 100
- */
-export async function fetchAllDonePercentage(date: string): Promise<number> {
+export async function fetchAllDonePercentage(date: string, kitchenId: string): Promise<number> {
   try {
-    /* 1) Tel taken met status = "done" of "in progress" */
-    const { count: doneCount, error: doneError } = await supabase
+    const { data, error } = await supabase
       .from("task_instances")
-      .select("id", { count: "exact", head: true })
-      .eq("date", date)
-      .in("status", ["done", "in progress"]); // ✅ beide tellen als voltooid
-
-    if (doneError) throw doneError;
-
-    /* 2) Tel totaal aantal actieve taken: "done", "in progress", "active" */
-    const { count: totalCount, error: totalError } = await supabase
-      .from("task_instances")
-      .select("id", { count: "exact", head: true })
+      .select(
+        `
+        id,
+        status,
+        task_template:task_template_id!inner(
+          section_id
+        )
+      `
+      )
       .eq("date", date)
       .in("status", ["done", "in progress", "active"]);
 
-    if (totalError) throw totalError;
+    if (error) throw error;
 
-    const done = doneCount ?? 0;
-    const total = totalCount ?? 0;
+    const filtered = data.filter(
+      (t: any) => t.task_template?.section_id && t.task_template.section_id !== null
+    );
+    const sectionIds = await getSectionIdsForKitchen(kitchenId);
+    const kitchenTasks = filtered.filter((t: any) => sectionIds.includes(t.task_template.section_id));
 
-    if (total === 0) return 0;
+    const done = kitchenTasks.filter((t: any) => t.status === "done" || t.status === "in progress").length;
+    const total = kitchenTasks.length;
 
-    const percentage = (done / total) * 100;
-    return Math.round(percentage);
-  } catch (error) {
-    console.error("Error fetching all done percentage:", error);
+    return total === 0 ? 0 : Math.round((done / total) * 100);
+  } catch (err) {
+    console.error("Error fetching all done percentage:", err);
     return 0;
   }
 }
 
-/**
- * Haal het aantal taken op dat is toegewezen aan een specifiek profiel (activeProfile) voor een bepaalde datum.
- * We zoeken naar taakinstances waarin 'assigned_to' de profileId bevat.
- */
-export async function fetchMyTasksCount(profileId: string, date: string): Promise<number> {
-  const { data, count, error } = await supabase
-    .from("task_instances")
-    .select("id", { count: "exact", head: true })
-    .in("status", ["active", "in progress"])
-    .contains("assigned_to", [profileId])
-    .eq("date", date);
-  if (error) {
-    console.error("Error fetching my tasks count:", error);
+export async function fetchMyTasksCount(profileId: string, date: string, kitchenId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from("task_instances")
+      .select(
+        `
+        id,
+        status,
+        assigned_to,
+        task_template:task_template_id!inner(
+          section_id
+        )
+      `
+      )
+      .eq("date", date)
+      .contains("assigned_to", [profileId])
+      .in("status", ["active", "in progress"]);
+
+    if (error) throw error;
+
+    const sectionIds = await getSectionIdsForKitchen(kitchenId);
+    const kitchenTasks = data.filter((t: any) => sectionIds.includes(t.task_template.section_id));
+    return kitchenTasks.length;
+  } catch (err) {
+    console.error("Error fetching my tasks count:", err);
     return 0;
   }
-  return count || 0;
 }
 
-/**
- * Haal het aantal active taken op voor een bepaalde keuken.
- */
-export async function fetchActiveTasksCount(date: string): Promise<number> {
-  const { count, error } = await supabase
-    .from("task_instances")
-    .select("id", { count: "exact", head: true })
-    .in("status", ["active", "in progress"]) // ✅ meerdere statussen
-    .eq("date", date);
+export async function fetchActiveTasksCount(date: string, kitchenId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from("task_instances")
+      .select(
+        `
+        id,
+        status,
+        task_template:task_template_id!inner(
+          section_id
+        )
+      `
+      )
+      .eq("date", date)
+      .in("status", ["active", "in progress"]);
 
-  if (error) {
-    console.error("Error fetching active tasks count:", error);
+    if (error) throw error;
+
+    const sectionIds = await getSectionIdsForKitchen(kitchenId);
+    const kitchenTasks = data.filter((t: any) => sectionIds.includes(t.task_template.section_id));
+    return kitchenTasks.length;
+  } catch (err) {
+    console.error("Error fetching active tasks count:", err);
     return 0;
   }
-  return count ?? 0;
 }
 
-/**
- * Haal het aantal task_instances op met status 'out of stock' voor een gegeven datum.
- */
-export async function fetchOutOfStockTasksCount(date: string): Promise<number> {
-  const { count, error } = await supabase
-    .from("task_instances")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "out of stock")
-    .eq("date", date);
+export async function fetchOutOfStockTasksCount(date: string, kitchenId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from("task_instances")
+      .select(`
+        id,
+        status,
+        task_template:task_template_id!inner(
+          section_id
+        )
+      `)
+      .eq("date", date)
+      .eq("status", "out of stock");
 
-  if (error) {
-    console.error("Error fetching out‑of‑stock count:", error);
+    if (error) throw error;
+
+    const sectionIds = await getSectionIdsForKitchen(kitchenId);
+    const kitchenTasks = data.filter((t: any) => sectionIds.includes(t.task_template.section_id));
+    return kitchenTasks.length;
+  } catch (err) {
+    console.error("Error fetching out‑of‑stock count:", err);
     return 0;
   }
-  return count ?? 0;
 }
 
-/**
- * Haal per sectie (binnen de gegeven kitchenId en de geselecteerde date)
- * het aantal 'active' taken op. We zoeken in task_instances die status==='active',
- * en joinen via task_template → sections om de sectie_id te herkennen.
- */
+export async function fetchNoStatusTasksCount(date: string, kitchenId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from("task_instances")
+      .select(`
+        id,
+        status,
+        task_template:task_template_id!inner(
+          section_id
+        )
+      `)
+      .eq("date", date)
+      .eq("status", "inactive");
+
+    if (error) throw error;
+
+    const sectionIds = await getSectionIdsForKitchen(kitchenId);
+    const kitchenTasks = data.filter((t: any) => sectionIds.includes(t.task_template.section_id));
+    return kitchenTasks.length;
+  } catch (err) {
+    console.error("Error fetching no‑status count:", err);
+    return 0;
+  }
+}
+
+
 export async function fetchActiveCountPerSection(
   kitchenId: string,
   date: string
 ): Promise<Record<string, number>> {
-  // We selecteren de data en includen de task_template-relatie
-  // om erachter te komen bij welke sectie deze instance hoort.
-  const { data, error } = await supabase
-    .from("task_instances")
-    .select(
+  try {
+    const { data, error } = await supabase
+      .from("task_instances")
+      .select(
+        `
+        id,
+        status,
+        task_template:task_template_id!inner(
+          section_id
+        )
       `
-      status,
-      task_template:task_template_id(
-        section_id
       )
-    `
-    )
-    .eq("date", date)
-    .in("status", ["active", "in progress"]);
+      .eq("date", date)
+      .in("status", ["active", "in progress"]);
 
-  if (error) throw error;
+    if (error) throw error;
 
-  const activeCounts: Record<string, number> = {};
+    const sectionIds = await getSectionIdsForKitchen(kitchenId);
+    const kitchenTasks = data.filter((t: any) => sectionIds.includes(t.task_template.section_id));
 
-  data.forEach((instance: any) => {
-    const secId = instance.task_template?.section_id;
-    if (secId) {
-      if (!activeCounts[secId]) {
-        activeCounts[secId] = 0;
-      }
-      activeCounts[secId] += 1;
-    }
-  });
+    const counts: Record<string, number> = {};
+    kitchenTasks.forEach((instance: any) => {
+      const secId = instance.task_template.section_id;
+      if (!counts[secId]) counts[secId] = 0;
+      counts[secId] += 1;
+    });
 
-  return activeCounts;
+    return counts;
+  } catch (err) {
+    console.error("Error fetching active count per section:", err);
+    return {};
+  }
+}
+
+async function getSectionIdsForKitchen(kitchenId: string): Promise<string[]> {
+  const { data, error } = await supabase.from("sections").select("id").eq("kitchen_id", kitchenId);
+
+  if (error) {
+    console.error("Error fetching section ids for kitchen:", error);
+    return [];
+  }
+
+  return data.map((s: any) => s.id);
 }

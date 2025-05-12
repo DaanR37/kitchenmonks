@@ -41,6 +41,8 @@ interface TaskDetailsModalProps {
   onSetActive: () => void;
   onSetInactive: () => void;
   onSetOutOfStock: () => void;
+  onEditTask: () => void;
+  onSetSkip: () => void;
   cleanTaskName: (name: string) => string;
   generateInitials: (firstName?: string, lastName?: string) => string;
   getColorFromId: (id: string) => string;
@@ -59,17 +61,27 @@ export default function TaskDetailsModal({
   onSetInactive,
   onSetOutOfStock,
   cleanTaskName,
-  generateInitials,
   getColorFromId,
+  onEditTask,
+  onSetSkip,
 }: TaskDetailsModalProps) {
   if (!selectedTask) return null;
 
   const renderStatusButtons = () => {
     const rows = [
-      ["done", "in progress"],
-      ["active", "out of stock"],
-      ["inactive", "edit"],
+      ["to do", "in progress"],
+      ["done", "out of stock"],
+      ["skip", "no status"],
     ];
+
+    const statusMapping: Record<string, string> = {
+      "to do": "active",
+      "in progress": "in progress",
+      done: "done",
+      "out of stock": "out of stock",
+      skip: "skip",
+      "no status": "inactive",
+    };
 
     const handleStatusChange = (statusKey: string) => {
       switch (statusKey) {
@@ -77,14 +89,14 @@ export default function TaskDetailsModal({
           return onSetDone();
         case "in progress":
           return onSetInProgress();
-        case "active":
-          return onSetActive();
-        case "inactive":
-          return onSetInactive();
+        case "to do":
+          return onSetActive(); // to do → active handler
+        case "no status":
+          return onSetInactive(); // no status → inactive handler
         case "out of stock":
           return onSetOutOfStock();
-        case "edit":
-          return onSetActive(); // edit maps to active
+        case "skip":
+          return onSetSkip();
       }
     };
 
@@ -92,18 +104,16 @@ export default function TaskDetailsModal({
       <View key={rowIndex} style={styles.statusGridRow}>
         {row.map((statusKey) => {
           const meta = STATUS_META[statusKey];
-          const isSelected = selectedTask.status === statusKey;
+          if (!meta) return null;
+
+          const isSelected = selectedTask.status === statusMapping[statusKey];
 
           return (
             <TouchableOpacity
               key={statusKey}
               style={[
                 styles.statusOval,
-                isSelected && {
-                  backgroundColor: "#e5f4e0",
-                  borderColor: "#2e8b57",
-                  borderWidth: 2,
-                },
+                isSelected && styles.statusOvalSelected, // ✅ nieuwe style
               ]}
               onPress={() => handleStatusChange(statusKey)}
             >
@@ -116,12 +126,11 @@ export default function TaskDetailsModal({
               >
                 {meta.icon && <Ionicons name={meta.icon} size={14} color={meta.iconColor || "#000"} />}
               </View>
-              <AppText
-                style={[styles.statusOvalLabel, isSelected && { color: "#2e8b57", fontWeight: "bold" }]}
-              >
-                {statusKey === "in progress"
-                  ? "In progress"
-                  : statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}
+              <AppText style={[styles.statusOvalLabel, isSelected && styles.statusOvalLabelSelected]}>
+                {statusKey
+                  .split(" ")
+                  .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                  .join(" ")}
               </AppText>
             </TouchableOpacity>
           );
@@ -142,16 +151,24 @@ export default function TaskDetailsModal({
         renderItem={({ item: profile }) => {
           const initials = (profile.first_name.charAt(0) + profile.last_name.charAt(0)).toUpperCase();
           const isAssigned = selectedTask?.assigned_to?.includes(profile.id);
+          const bubbleColor = getColorFromId(profile.id);
+
           return (
             <TouchableOpacity
               style={[
                 styles.profileBubble,
-                { backgroundColor: getColorFromId(profile.id) },
-                isAssigned && styles.profileBubbleSelected,
+                isAssigned && { borderWidth: 2, borderColor: bubbleColor },
               ]}
               onPress={() => onAssignToggle(profile.id)}
               key={profile.id}
             >
+              <View
+                style={[
+                  styles.profileBubbleBackground,
+                  { backgroundColor: bubbleColor },
+                  isAssigned && { opacity: 0.5 },
+                ]}
+              />
               <AppText style={styles.profileBubbleText}>{initials}</AppText>
             </TouchableOpacity>
           );
@@ -159,14 +176,6 @@ export default function TaskDetailsModal({
       />
     );
   };
-
-  // const statusButtons = [
-  //   { label: "Done", handler: onSetDone },
-  //   { label: "In progress", handler: onSetInProgress },
-  //   { label: "Active", handler: onSetActive },
-  //   { label: "Inactive", handler: onSetInactive },
-  //   { label: "Out of stock", handler: onSetOutOfStock },
-  // ];
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -179,6 +188,9 @@ export default function TaskDetailsModal({
           <View style={styles.statusGridContainer}>
             <AppText style={styles.statusGridTitle}>Status</AppText>
             {renderStatusButtons()}
+            <TouchableOpacity style={styles.editButton} onPress={() => console.log("Edit task pressed")}>
+              <AppText style={styles.editButtonText}>Edit task</AppText>
+            </TouchableOpacity>
           </View>
         </Pressable>
       </Pressable>
@@ -189,16 +201,25 @@ export default function TaskDetailsModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
     justifyContent: "flex-end",
+    backgroundColor: "transparent",
   },
   bottomModalContainer: {
-    backgroundColor: "#fff",
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingHorizontal: 15,
     paddingTop: 20,
     paddingBottom: 0,
+    backgroundColor: "#fff",
+
+    // ✅ Shadow voor iOS:
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+
+    // ✅ Elevation voor Android:
+    elevation: 12,
   },
   modalContent: {
     backgroundColor: "#fff",
@@ -229,21 +250,21 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#bbb",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 8,
     marginBottom: 8,
+    overflow: "hidden",
   },
-  profileBubbleSelected: {
-    backgroundColor: "#6C63FF",
-    borderWidth: 3,
-    borderColor: "black",
+  profileBubbleBackground: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 22,
   },
   profileBubbleText: {
     color: "#fff",
     fontWeight: "bold",
     fontSize: 15,
+    zIndex: 1,
   },
   taskItemRow: {
     flexDirection: "row",
@@ -252,8 +273,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     padding: 10,
     borderRadius: 6,
-},
-taskStatusCircleContainer: {
+  },
+  taskStatusCircleContainer: {
     width: 1,
     alignItems: "center",
     marginRight: 26,
@@ -313,6 +334,18 @@ taskStatusCircleContainer: {
     marginBottom: 12,
     gap: 6,
   },
+  editButton: {
+    backgroundColor: "#f2f2f2",
+    borderRadius: 50,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginVertical: 16,
+  },
+  editButtonText: {
+    color: "#333",
+    fontSize: 16,
+    fontWeight: "600",
+  },
   /* De ovale container */
   statusOval: {
     flex: 1, // zodat ze even breed worden
@@ -320,11 +353,11 @@ taskStatusCircleContainer: {
     alignItems: "center",
     marginHorizontal: 0,
     borderRadius: 50,
-    backgroundColor: "#f2f2f2",
+    // backgroundColor: "#f2f2f2",
   },
-  // Als de status “geselecteerd” is, kun je wat highlight geven
   statusOvalSelected: {
-    backgroundColor: "#9fdc8ab5",
+    borderColor: "#0000003f",
+    borderWidth: 0.5,
   },
   statusOvalCircle: {
     width: 38,
@@ -341,5 +374,8 @@ taskStatusCircleContainer: {
     color: "#333",
     fontSize: 15,
     fontWeight: "500",
+  },
+  statusOvalLabelSelected: {
+    fontWeight: "bold",
   },
 });

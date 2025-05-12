@@ -122,3 +122,17 @@ export async function updateTaskInstanceDone(taskInstanceId: string) {
   if (error) throw error;
   return data;
 }
+
+export async function updateTaskInstanceSkip(taskInstanceId: string) {
+  const { data, error } = await supabase
+    .from("task_instances")
+    .update({
+      status: "skip",
+      // finished_at: new Date().toISOString(), // of laat weg als niet nodig
+    })
+    .eq("id", taskInstanceId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}

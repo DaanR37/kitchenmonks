@@ -54,6 +54,8 @@ export default function MyMepTabletView() {
     handleSetActiveTask,
     handleSetInactiveTask,
     handleSetOutOfStock,
+    handleEditTask,
+    handleSetSkip,
   } = useTaskModal({ sections, setSections });
 
   /* loadData:
@@ -206,6 +208,8 @@ export default function MyMepTabletView() {
         cleanTaskName={cleanTaskName}
         generateInitials={generateInitials}
         getColorFromId={getColorFromId}
+        onEditTask={handleEditTask}
+        onSetSkip={handleSetSkip}
       />
     </View>
   );

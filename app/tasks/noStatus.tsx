@@ -1,25 +1,27 @@
-import React, { useState, useEffect, useContext } from "react";
-import { View, StyleSheet, FlatList, Pressable } from "react-native";
+import React, { useState, useEffect, useContext, useRef } from "react";
+import { View, StyleSheet, TouchableOpacity, FlatList, Pressable, Platform } from "react-native";
+import { useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
-import Ionicons from "@expo/vector-icons/build/Ionicons";
-import AppText from "@/components/AppText";
-import useTaskModal from "@/hooks/useTaskModal";
-import { TaskRow, SectionData } from "@/hooks/useTaskModal";
+import useTaskModal, { TaskRow, SectionData } from "@/hooks/useTaskModal";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
+import AppText from "@/components/AppText";
+import Ionicons from "@expo/vector-icons/build/Ionicons";
 
-export default function TeamMepTabletView() {
+export default function NoStatusScreen() {
+  const router = useRouter();
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
+  const flatListRef = useRef<FlatList>(null);
 
   /* Haal eerst de profielen op zodra de user beschikbaar is */
   useEffect(() => {
@@ -53,18 +55,30 @@ export default function TeamMepTabletView() {
     handleSetActiveTask,
     handleSetInactiveTask,
     handleSetOutOfStock,
-    handleEditTask,
     handleSetSkip,
+    handleEditTask,
   } = useTaskModal({ sections, setSections });
 
-  /*
-    loadData:
-    1. Controleer of de user en kitchen_id beschikbaar zijn.
-    2. Haal alle secties op voor deze keuken via fetchSections.
-    3. Voor elke sectie roep je de helperfunctie getTasksForSectionOnDate aan,
-       die de geldige task_instances (of indien afwezig, nieuwe instances) ophaalt voor de selectedDate.
-    4. Combineer (merge) de secties met hun taken en sla dit op in de lokale state.
-  */
+  useEffect(() => {
+    if (selectedTask) {
+      scrollToSelectedTask();
+    }
+  }, [selectedTask]);
+
+  const scrollToSelectedTask = () => {
+    let index = 0;
+    let found = false;
+    sections.forEach((section) => {
+      section.tasks.forEach((task) => {
+        if (task.id === selectedTask?.id) {
+          found = true;
+        }
+        if (!found) index++;
+      });
+    });
+    flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+  };
+
   async function loadData() {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
@@ -72,46 +86,45 @@ export default function TeamMepTabletView() {
 
     setLoading(true);
     try {
-      /* 1) Haal alle secties op voor de keuken */
+      // 1️⃣ Haal alle secties op voor de keuken
       const secs = await fetchSections(kitchenId, selectedDate);
-      /* 2) Voor elke sectie: haal de taken voor de geselecteerde datum op en voeg de section-gegevens (inclusief datums) toe */
+
+      // 2️⃣ Voor elke sectie: haal de taken op voor de geselecteerde datum en filter op 'inactive'
       const merged: SectionData[] = await Promise.all(
         secs.map(async (sec: any) => {
-          /* Haal de taken op voor deze sectie voor de geselecteerde datum. */
           const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
 
-          const tasks = allTasks
-            .filter(
-              (t) =>
-                t.status === "active" ||
-                t.status === "in progress" ||
-                t.status === "done" ||
-                t.status === "out of stock"
-            )
-            .map((t: any) => ({
-              ...t,
-              section: {
-                id: sec.id,
-                section_name: sec.section_name,
-                start_date: sec.start_date,
-                end_date: sec.end_date,
-              },
-            }));
+          // Filter alleen taken met status 'inactive'
+          const filteredTasks = allTasks.filter((task: TaskRow) => task.status === "inactive");
+
+          // Voeg section-data toe aan elke taak
+          const tasksWithSection = filteredTasks.map((t: any) => ({
+            ...t,
+            section: {
+              id: sec.id,
+              section_name: sec.section_name,
+              start_date: sec.start_date,
+              end_date: sec.end_date,
+            },
+          }));
 
           return {
             id: sec.id,
             section_name: sec.section_name,
             start_date: sec.start_date,
             end_date: sec.end_date,
-            tasks,
-          } as SectionData;
+            tasks: tasksWithSection,
+          };
         })
       );
-      // setSections(merged);
-      /* drop lege secties */
-      setSections(merged.filter((s) => s.tasks.length > 0));
+
+      // 3️⃣ Filter secties waar minstens één taak overblijft
+      const sectionsWithTasks = merged.filter((sec) => sec.tasks.length > 0);
+
+      // 4️⃣ Zet de state
+      setSections(sectionsWithTasks);
     } catch (error) {
-      console.log("Error loading inactive tasks:", error);
+      console.error("Error loading no status tasks:", error);
     } finally {
       setLoading(false);
     }
@@ -126,19 +139,30 @@ export default function TeamMepTabletView() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <AppText>Loading tasks for {selectedDate}...</AppText>
+        <AppText>Loading my tasks for {selectedDate}...</AppText>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Lijst met secties en hun taken */}
+      {/* Header */}
+      <View style={styles.header}>
+        <AppText style={styles.headerText}>No status</AppText>
+      </View>
+
+      <View style={styles.headerRow}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <View style={styles.backButtonCircle}>
+            <Ionicons name="chevron-back" size={14} color="#333" />
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* FlatList met secties en hun taken (gefilterd op activeProfile) */}
       <FlatList
         data={sections}
         keyExtractor={(sec) => sec.id}
-        horizontal // → zorgt voor horizontaal scrollen
-        showsHorizontalScrollIndicator={false}
         renderItem={({ item: sec }) => (
           <View style={styles.sectionContainer}>
             <AppText style={styles.sectionTitle}>{sec.section_name}</AppText>
@@ -149,8 +173,16 @@ export default function TeamMepTabletView() {
                 borderColor: "#ccc",
               }) as StatusMeta;
 
+              const isSelected = selectedTask?.id === task.id;
+
               return (
-                <View key={task.id} style={styles.taskItemRow}>
+                <View
+                  key={task.id}
+                  style={[
+                    styles.taskItemRow,
+                    // isSelected && styles.taskItemSelected,
+                  ]}
+                >
                   {/* 1) Cirkel links */}
                   <Pressable onPress={() => handleCirclePress(task)} style={styles.taskStatusCircleContainer}>
                     <View
@@ -176,7 +208,7 @@ export default function TeamMepTabletView() {
                     </AppText>
                   </Pressable>
 
-                  {/* ③ kleine assigned‑thumbnails */}
+                  {/* 3) kleine assigned‑thumbnails */}
                   <View style={styles.assignedBubbles}>
                     {task.assigned_to?.map((pid) => {
                       const prof = allProfiles.find((p) => p.id === pid);
@@ -197,7 +229,6 @@ export default function TeamMepTabletView() {
         )}
       />
 
-      {/* --- Modal: Taakdetails --- */}
       <TaskDetailsModal
         visible={showDetailsModal}
         onClose={closeModal}
@@ -211,10 +242,10 @@ export default function TeamMepTabletView() {
         onSetInactive={handleSetInactiveTask}
         onSetOutOfStock={handleSetOutOfStock}
         onEditTask={handleEditTask}
+        onSetSkip={handleSetSkip}
         cleanTaskName={cleanTaskName}
         generateInitials={generateInitials}
         getColorFromId={getColorFromId}
-        onSetSkip={handleSetSkip}
       />
     </View>
   );
@@ -222,30 +253,80 @@ export default function TeamMepTabletView() {
 
 const styles = StyleSheet.create({
   container: {
-    // marginVertical: 26,
+    flex: 1,
     backgroundColor: "#f6f6f6",
+    paddingVertical: Platform.select({
+      ios: 85,
+      android: 35,
+    }),
   },
-
-  sectionContainer: {
-    width: 325,
-    height: "auto",
-    marginHorizontal: 24,
-    marginVertical: 32,
-    // marginBottom: 16,
-    borderRadius: 18,
-    padding: 16,
-    backgroundColor: "#fff",
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
   },
-  sectionTitle: { fontSize: 21, fontWeight: "bold", marginBottom: 9 },
-
+  backButtonCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e0e0e0dc", // zachtgrijs
+  },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  header: { alignItems: "center", marginBottom: 8 },
+  headerText: { fontSize: 18, fontWeight: "bold" },
+  backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 12 },
+  backText: { fontSize: 17, color: "#666", marginLeft: 4 },
+
+  // -- De secties op het hoofdscherm --
+  sectionContainer: {
+    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+    padding: 16,
+  },
+  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
+  addTaskButton: { marginTop: 16, paddingVertical: 0 },
+  addTaskText: { color: "#666" },
+
+  // modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10, color: "#333" },
+  // modalTaskTitle: {
+  //   fontSize: 18,
+  //   fontWeight: "bold",
+  //   color: "#333",
+  //   textAlign: "center",
+  //   marginBottom: 10,
+  // },
+
+  saveButton: {
+    backgroundColor: "#6C63FF",
+    padding: 10,
+    borderRadius: 6,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  cancelButton: { padding: 10, alignItems: "center" },
+
+  // -- Assign to styling --
+  profileBubble: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#bbb",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+    marginBottom: 8,
+  },
   taskItemRow: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#fff",
     marginBottom: 6,
     padding: 10,
     borderRadius: 6,
-    backgroundColor: "#fff",
   },
   taskStatusCircleContainer: {
     width: 1,
@@ -253,17 +334,22 @@ const styles = StyleSheet.create({
     marginRight: 26,
   },
   taskStatusCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
   taskTextContainer: {
     flex: 1,
   },
+  // taskItemSelected: {
+  //   borderWidth: 2,
+  //   borderColor: "#2e8b57", // groene accentkleur of jouw voorkeur
+  //   borderRadius: 8,
+  // },
   taskText: {
-    fontSize: 18,
+    fontSize: 16,
     color: "#333",
     fontWeight: "500",
   },
@@ -273,24 +359,31 @@ const styles = StyleSheet.create({
   },
   inactiveText: {
     color: "#666",
-    fontWeight: "500",
-    opacity: 0.8,
   },
   assignedBubbles: {
     flexDirection: "row",
     marginLeft: 8,
   },
   bubbleSmall: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     marginLeft: 4,
     alignItems: "center",
     justifyContent: "center",
   },
   bubbleSmallText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
+  },
+
+  statusOval: {
+    flex: 1, // zodat ze even breed worden
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 0,
+    borderRadius: 50,
+    backgroundColor: "#f2f2f2",
   },
 });

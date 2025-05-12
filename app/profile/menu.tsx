@@ -1,5 +1,5 @@
 import React, { useContext } from "react";
-import { View, StyleSheet, TouchableOpacity } from "react-native";
+import { View, StyleSheet, TouchableOpacity, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { ProfileContext } from "@/services/ProfileContext";
 import { logoutUser } from "@/services/api/logout";
@@ -19,9 +19,13 @@ export default function ProfileMenuScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header / Titel */}
+      {/* Header / Titel + Back-button */}
       <View style={styles.headerRow}>
-        <AppText style={styles.headerText}>Profiel</AppText>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.push("/")}>
+          <View style={styles.backButtonCircle}>
+            <Ionicons name="chevron-back" size={14} color="#333" />
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Profielen */}
@@ -72,16 +76,39 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f6f6f6",
-    paddingTop: 50,
     paddingHorizontal: 20,
+    paddingVertical: Platform.select({
+      ios: 85,
+      android: 35,
+    }),
+  },
+  backButton: {
+    marginBottom: 10,
+    marginRight: 12, // optioneel als je hem wilt scheiden van de tekst
+  },
+  backButtonCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e0e0e0dc", // zachtgrijs
   },
   headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 20,
   },
   headerText: {
     fontSize: 20,
     fontWeight: "600",
     color: "#333",
+    marginLeft: 8, // ruimte tussen chevron en 'Profiel'
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: "#333",
+    marginLeft: 4,
   },
   menuItem: {
     flexDirection: "row",

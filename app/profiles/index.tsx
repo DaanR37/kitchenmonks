@@ -17,14 +17,6 @@ import { ProfileContext, ProfileData } from "@/services/ProfileContext";
 import { supabase } from "@/services/supabaseClient";
 import AppText from "@/components/AppText";
 
-/* Functie om de initialen van een profiel te genereren */
-// const generateInitials = (firstName: string, lastName: string): string => {
-//   /* Controleer of voornaam en achternaam bestaan en niet null/undefined zijn */
-//   const firstInitial = firstName ? firstName.charAt(0).toUpperCase() : "";
-//   const lastInitial = lastName ? lastName.charAt(0).toUpperCase() : "";
-//   return `${firstInitial}${lastInitial}`;
-// };
-
 export default function ChooseProfileScreen() {
   const router = useRouter();
   const searchParams = useLocalSearchParams<{ force?: string }>(); /* voor toegang tot de query parameters */
@@ -204,32 +196,38 @@ export default function ChooseProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        {/* Buitenste laag die de achtergrond dimt */}
-        <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <AppText style={styles.modalTitle}>Nieuw profiel</AppText>
-            <TextInput
-              style={styles.input}
-              placeholder="Voornaam"
-              value={firstName}
-              onChangeText={setFirstName}
-              autoCorrect={false}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Achternaam"
-              value={lastName}
-              onChangeText={setLastName}
-              autoCorrect={false}
-            />
-            <TouchableOpacity style={styles.saveButton} onPress={handleCreateProfile}>
-              <AppText style={styles.saveButtonText}>Opslaan</AppText>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
-              <AppText style={styles.cancelButtonText}>Annuleren</AppText>
-            </TouchableOpacity>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+        >
+          {/* Buitenste laag die de achtergrond dimt */}
+          <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
+            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+              <AppText style={styles.modalTitle}>Nieuw profiel</AppText>
+              <TextInput
+                style={styles.input}
+                placeholder="Voornaam"
+                value={firstName}
+                onChangeText={setFirstName}
+                autoCorrect={false}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Achternaam"
+                value={lastName}
+                onChangeText={setLastName}
+                autoCorrect={false}
+              />
+              <TouchableOpacity style={styles.saveButton} onPress={handleCreateProfile}>
+                <AppText style={styles.saveButtonText}>Opslaan</AppText>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
+                <AppText style={styles.cancelButtonText}>Annuleren</AppText>
+              </TouchableOpacity>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     );
   };
@@ -243,36 +241,45 @@ export default function ChooseProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowEditModal(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowEditModal(false)}>
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <AppText style={styles.modalTitle}>Profiel bewerken</AppText>
-            <TextInput
-              style={styles.input}
-              placeholder="Voornaam"
-              value={editFirstName}
-              onChangeText={setEditFirstName}
-              autoCorrect={false}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Achternaam"
-              value={editLastName}
-              onChangeText={setEditLastName}
-              autoCorrect={false}
-            />
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveEditProfile}>
-              <AppText style={styles.saveButtonText}>Opslaan</AppText>
-            </TouchableOpacity>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+        >
+          <Pressable style={styles.modalOverlay} onPress={() => setShowEditModal(false)}>
+            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+              <AppText style={styles.modalTitle}>Profiel bewerken</AppText>
+              <TextInput
+                style={styles.input}
+                placeholder="Voornaam"
+                value={editFirstName}
+                onChangeText={setEditFirstName}
+                autoCorrect={false}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Achternaam"
+                value={editLastName}
+                onChangeText={setEditLastName}
+                autoCorrect={false}
+              />
+              <TouchableOpacity style={styles.saveButton} onPress={handleSaveEditProfile}>
+                <AppText style={styles.saveButtonText}>Opslaan</AppText>
+              </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.deleteButton, { marginTop: 12 }]} onPress={handleDeleteProfile}>
-              <AppText style={styles.deleteButtonText}>Verwijderen</AppText>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.deleteButton, { marginTop: 12 }]}
+                onPress={handleDeleteProfile}
+              >
+                <AppText style={styles.deleteButtonText}>Verwijderen</AppText>
+              </TouchableOpacity>
 
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowEditModal(false)}>
-              <AppText style={styles.cancelButtonText}>Annuleren</AppText>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowEditModal(false)}>
+                <AppText style={styles.cancelButtonText}>Annuleren</AppText>
+              </TouchableOpacity>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     );
   };
@@ -286,37 +293,32 @@ export default function ChooseProfileScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
-    >
-      <View style={styles.mainContainer}>
-        {/* Header met chevron en tekst "Kies je profiel" */}
-        <View style={styles.headerRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.replace("/auth")}>
-            <Ionicons name="chevron-back" size={14} color="#666" />
-          </TouchableOpacity>
-          <AppText style={styles.title}>Terug naar login</AppText>
-        </View>
-
-        <FlatList
-          data={profiles}
-          keyExtractor={(item) => item.id}
-          renderItem={renderProfileItem}
-          ListEmptyComponent={() => <AppText style={styles.emptyText}>Geen profielen gevonden.</AppText>}
-          keyboardShouldPersistTaps="always"
-          contentContainerStyle={{ paddingBottom: 120, paddingTop: 30 }}
-          ListHeaderComponent={
-            <TouchableOpacity style={styles.addProfileButton} onPress={() => setShowAddModal(true)}>
-              <AppText style={styles.addProfileText}>+  Voeg kok toe</AppText>
-            </TouchableOpacity>
-          }
-        />
-        {renderAddProfileModal()}
-        {renderEditProfileModal()}
+    <View style={styles.mainContainer}>
+      <View style={styles.headerRow}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.replace("/auth")}>
+          <View style={styles.backButtonCircle}>
+            <Ionicons name="chevron-back" size={14} color="#333" />
+          </View>
+        </TouchableOpacity>
+        {/* <AppText style={styles.title}>Kies je profiel</AppText> */}
       </View>
-    </KeyboardAvoidingView>
+
+      <FlatList
+        data={profiles}
+        keyExtractor={(item) => item.id}
+        renderItem={renderProfileItem}
+        ListEmptyComponent={() => <AppText style={styles.emptyText}>Geen profielen gevonden.</AppText>}
+        keyboardShouldPersistTaps="always"
+        contentContainerStyle={{ paddingBottom: 120, paddingTop: 30 }}
+        ListHeaderComponent={
+          <TouchableOpacity style={styles.addProfileButton} onPress={() => setShowAddModal(true)}>
+            <AppText style={styles.addProfileText}>+ Voeg kok toe</AppText>
+          </TouchableOpacity>
+        }
+      />
+      {renderAddProfileModal()}
+      {renderEditProfileModal()}
+    </View>
   );
 }
 
@@ -324,6 +326,10 @@ const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
     backgroundColor: "#f6f6f6",
+    paddingVertical: Platform.select({
+      ios: 75,
+      android: 15,
+    }),
   },
   loadingContainer: {
     flex: 1,
@@ -334,19 +340,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
+    // paddingTop: 16,
+    // paddingBottom: 8,
+    // paddingVertical: Platform.select({
+    //   ios: 10,
+    //   android: 5,
+    // }),
+    marginTop: Platform.select({
+      ios: 10,
+      android: 5,
+    }),
   },
   backButton: {
     marginRight: 8,
   },
+  backButtonCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#e0e0e0", // zachte grijze cirkel
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: {
     fontSize: 17,
-    color: "#666",
-    fontWeight: "500",
-    // marginBottom: 16,
+    color: "#333",
+    fontWeight: "600",
   },
-
   /* Profielrij in de FlatList: links item, rechts de 3-puntjes */
   profileRow: {
     flexDirection: "row",

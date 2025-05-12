@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from "react";
-import { View, StyleSheet, TouchableOpacity, FlatList, Pressable } from "react-native";
+import { View, StyleSheet, TouchableOpacity, FlatList, Pressable, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
@@ -7,24 +7,21 @@ import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
-import Ionicons from "@expo/vector-icons/build/Ionicons";
-import AppText from "@/components/AppText";
-import useTaskModal from "@/hooks/useTaskModal";
-import { TaskRow, SectionData } from "@/hooks/useTaskModal";
+import useTaskModal, { TaskRow, SectionData } from "@/hooks/useTaskModal";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
+import AppText from "@/components/AppText";
+import Ionicons from "@expo/vector-icons/build/Ionicons";
 
 export default function AllTasksScreen() {
   const router = useRouter();
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
-  // const { activeProfile } = useContext(ProfileContext);
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
 
-  
   /* Haal eerst de profielen op zodra de user beschikbaar is */
   useEffect(() => {
     async function loadProfiles() {
@@ -60,8 +57,9 @@ export default function AllTasksScreen() {
     handleSetActiveTask,
     handleSetInactiveTask,
     handleSetOutOfStock,
+    handleEditTask,
+    handleSetSkip,
   } = useTaskModal({ sections, setSections });
-
 
   /* 2) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
   async function loadData(kitchenId: string) {
@@ -126,10 +124,13 @@ export default function AllTasksScreen() {
         <AppText style={styles.headerText}>All</AppText>
       </View>
 
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Ionicons name="chevron-back" size={14} color="#000" />
-        <AppText style={styles.backText}>Back</AppText>
-      </TouchableOpacity>
+      <View style={styles.headerRow}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <View style={styles.backButtonCircle}>
+            <Ionicons name="chevron-back" size={14} color="#333" />
+          </View>
+        </TouchableOpacity>
+      </View>
 
       {/* FlatList met secties en taken (gefiltered op done/in progress) */}
       <FlatList
@@ -208,13 +209,35 @@ export default function AllTasksScreen() {
         cleanTaskName={cleanTaskName}
         generateInitials={generateInitials}
         getColorFromId={getColorFromId}
+        onEditTask={handleEditTask}
+        onSetSkip={handleSetSkip}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f6f6f6", paddingTop: 40 },
+  container: {
+    flex: 1,
+    backgroundColor: "#f6f6f6",
+    paddingVertical: Platform.select({
+      ios: 85,
+      android: 35,
+    }),
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  backButtonCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e0e0e0dc", // zachtgrijs
+  },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: { alignItems: "center", marginBottom: 8 },
   headerText: { fontSize: 18, fontWeight: "bold" },
@@ -230,6 +253,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
 
+  /* Task item row */
   taskItemRow: {
     flexDirection: "row",
     alignItems: "center",

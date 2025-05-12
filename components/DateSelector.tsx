@@ -85,12 +85,18 @@ export default function DateSelector({ selectedDate, onDateChange }: DateSelecto
           style={[styles.chevronCircle, isTabletLandscape && styles.chevronCircleTablet]}
           onPress={() => onDateChange(getPrevDate(selectedDate))}
         >
-          <Ionicons style={[styles.chevronIcon, isTabletLandscape && styles.chevronIconTablet]} name="chevron-back" size={12} />
+          <Ionicons
+            style={[styles.chevronIcon, isTabletLandscape && styles.chevronIconTablet]}
+            name="chevron-back"
+            size={12}
+          />
         </TouchableOpacity>
 
         {/* Tikken op de datumtekst opent de kalender-modal */}
         <TouchableOpacity onPress={handlePressDateText}>
-          <AppText style={[styles.dateText, isTabletLandscape && styles.dateTextTablet]}>{displayText}</AppText>
+          <AppText style={[styles.dateText, isTabletLandscape && styles.dateTextTablet]}>
+            {displayText}
+          </AppText>
         </TouchableOpacity>
 
         {/* Volgende dag */}
@@ -98,7 +104,11 @@ export default function DateSelector({ selectedDate, onDateChange }: DateSelecto
           style={[styles.chevronCircle, isTabletLandscape && styles.chevronCircleTablet]}
           onPress={() => onDateChange(getNextDate(selectedDate))}
         >
-          <Ionicons style={[styles.chevronIcon, isTabletLandscape && styles.chevronIconTablet]} name="chevron-forward" size={12} />
+          <Ionicons
+            style={[styles.chevronIcon, isTabletLandscape && styles.chevronIconTablet]}
+            name="chevron-forward"
+            size={12}
+          />
         </TouchableOpacity>
       </View>
 
@@ -122,14 +132,14 @@ const styles = StyleSheet.create({
   dateOval: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 7,
+    padding: 6,
     borderRadius: 999,
     backgroundColor: "#ffffff",
   },
   chevronCircle: {
     width: 22,
     height: 22,
-    borderRadius: 12,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0, 0, 0, 0.05)",
@@ -138,14 +148,13 @@ const styles = StyleSheet.create({
     color: "#000",
   },
   dateText: {
-    fontSize: 15,
-    // marginHorizontal: 8,
-    // fontWeight: "600",
+    fontSize: 16,
+    marginHorizontal: 9,
   },
 
   // -- Tablet view --
   dateContainerTablet: {
-    // marginVertical: 12,
+    marginVertical: 0,
   },
   dateOvalTablet: {
     padding: 7,
@@ -153,7 +162,7 @@ const styles = StyleSheet.create({
   chevronCircleTablet: {
     width: 28,
     height: 28,
-    borderRadius: 14, 
+    borderRadius: 14,
   },
   chevronIconTablet: {
     color: "#000",
@@ -161,6 +170,6 @@ const styles = StyleSheet.create({
   },
   dateTextTablet: {
     fontSize: 18,
-    marginHorizontal: 11,
+    marginHorizontal: 12,
   },
 });

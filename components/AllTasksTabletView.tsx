@@ -60,6 +60,8 @@ export default function AllTasksTabletView() {
     handleSetActiveTask,
     handleSetInactiveTask,
     handleSetOutOfStock,
+    handleEditTask,
+    handleSetSkip,
   } = useTaskModal({ sections, setSections });
 
   /* 2) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
@@ -199,6 +201,8 @@ export default function AllTasksTabletView() {
         cleanTaskName={cleanTaskName}
         generateInitials={generateInitials}
         getColorFromId={getColorFromId}
+        onEditTask={handleEditTask}
+        onSetSkip={handleSetSkip}
       />
     </View>
   );

@@ -1,20 +1,19 @@
 import React, { useState, useEffect, useContext } from "react";
-import { View, StyleSheet, FlatList, Pressable } from "react-native";
+import { View, StyleSheet, TouchableOpacity, FlatList, Pressable } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
-import { ProfileData } from "@/services/ProfileContext";
+import { ProfileContext, ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
-import Ionicons from "@expo/vector-icons/build/Ionicons";
-import AppText from "@/components/AppText";
-import useTaskModal from "@/hooks/useTaskModal";
-import { TaskRow, SectionData } from "@/hooks/useTaskModal";
+import useTaskModal, { TaskRow, SectionData } from "@/hooks/useTaskModal";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
+import AppText from "@/components/AppText";
+import Ionicons from "@expo/vector-icons/build/Ionicons";
 
-export default function TeamMepTabletView() {
+export default function NoStatusTabletView() {
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
   const [sections, setSections] = useState<SectionData[]>([]);
@@ -57,14 +56,6 @@ export default function TeamMepTabletView() {
     handleSetSkip,
   } = useTaskModal({ sections, setSections });
 
-  /*
-    loadData:
-    1. Controleer of de user en kitchen_id beschikbaar zijn.
-    2. Haal alle secties op voor deze keuken via fetchSections.
-    3. Voor elke sectie roep je de helperfunctie getTasksForSectionOnDate aan,
-       die de geldige task_instances (of indien afwezig, nieuwe instances) ophaalt voor de selectedDate.
-    4. Combineer (merge) de secties met hun taken en sla dit op in de lokale state.
-  */
   async function loadData() {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
@@ -72,46 +63,45 @@ export default function TeamMepTabletView() {
 
     setLoading(true);
     try {
-      /* 1) Haal alle secties op voor de keuken */
+      // 1️⃣ Haal alle secties op voor de keuken
       const secs = await fetchSections(kitchenId, selectedDate);
-      /* 2) Voor elke sectie: haal de taken voor de geselecteerde datum op en voeg de section-gegevens (inclusief datums) toe */
+
+      // 2️⃣ Voor elke sectie: haal de taken op voor de geselecteerde datum en filter op 'inactive'
       const merged: SectionData[] = await Promise.all(
         secs.map(async (sec: any) => {
-          /* Haal de taken op voor deze sectie voor de geselecteerde datum. */
           const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
 
-          const tasks = allTasks
-            .filter(
-              (t) =>
-                t.status === "active" ||
-                t.status === "in progress" ||
-                t.status === "done" ||
-                t.status === "out of stock"
-            )
-            .map((t: any) => ({
-              ...t,
-              section: {
-                id: sec.id,
-                section_name: sec.section_name,
-                start_date: sec.start_date,
-                end_date: sec.end_date,
-              },
-            }));
+          // Filter alleen taken met status 'inactive'
+          const filteredTasks = allTasks.filter((task: TaskRow) => task.status === "inactive");
+
+          // Voeg section-data toe aan elke taak
+          const tasksWithSection = filteredTasks.map((t: any) => ({
+            ...t,
+            section: {
+              id: sec.id,
+              section_name: sec.section_name,
+              start_date: sec.start_date,
+              end_date: sec.end_date,
+            },
+          }));
 
           return {
             id: sec.id,
             section_name: sec.section_name,
             start_date: sec.start_date,
             end_date: sec.end_date,
-            tasks,
-          } as SectionData;
+            tasks: tasksWithSection,
+          };
         })
       );
-      // setSections(merged);
-      /* drop lege secties */
-      setSections(merged.filter((s) => s.tasks.length > 0));
+
+      // 3️⃣ Filter secties waar minstens één taak overblijft
+      const sectionsWithTasks = merged.filter((sec) => sec.tasks.length > 0);
+
+      // 4️⃣ Zet de state
+      setSections(sectionsWithTasks);
     } catch (error) {
-      console.log("Error loading inactive tasks:", error);
+      console.error("Error loading no status tasks:", error);
     } finally {
       setLoading(false);
     }
@@ -126,14 +116,14 @@ export default function TeamMepTabletView() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <AppText>Loading tasks for {selectedDate}...</AppText>
+        <AppText>Loading my tasks for {selectedDate}...</AppText>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Lijst met secties en hun taken */}
+      {/* FlatList met secties en hun taken (gefilterd op activeProfile) */}
       <FlatList
         data={sections}
         keyExtractor={(sec) => sec.id}
@@ -176,7 +166,7 @@ export default function TeamMepTabletView() {
                     </AppText>
                   </Pressable>
 
-                  {/* ③ kleine assigned‑thumbnails */}
+                  {/* 3) kleine assigned‑thumbnails */}
                   <View style={styles.assignedBubbles}>
                     {task.assigned_to?.map((pid) => {
                       const prof = allProfiles.find((p) => p.id === pid);
@@ -197,7 +187,6 @@ export default function TeamMepTabletView() {
         )}
       />
 
-      {/* --- Modal: Taakdetails --- */}
       <TaskDetailsModal
         visible={showDetailsModal}
         onClose={closeModal}
@@ -210,10 +199,10 @@ export default function TeamMepTabletView() {
         onSetActive={handleSetActiveTask}
         onSetInactive={handleSetInactiveTask}
         onSetOutOfStock={handleSetOutOfStock}
-        onEditTask={handleEditTask}
         cleanTaskName={cleanTaskName}
         generateInitials={generateInitials}
         getColorFromId={getColorFromId}
+        onEditTask={handleEditTask}
         onSetSkip={handleSetSkip}
       />
     </View>

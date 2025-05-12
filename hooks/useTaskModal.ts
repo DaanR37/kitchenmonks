@@ -4,6 +4,7 @@ import {
   updateTaskInstanceDone,
   updateTaskInstanceInProgress,
   updateTaskInstanceStatus,
+  updateTaskInstanceSkip,
 } from "@/services/api/taskInstances";
 
 export type TaskRow = {
@@ -63,6 +64,11 @@ export default function useTaskModal({
     );
   }
 
+  async function handleEditTask() {
+    if (!selectedTask) return;
+    console.log("Edit task pressed");
+  }
+
   async function handleToggleAssignTask(profileId: string) {
     if (!selectedTask) return;
     const current = selectedTask.assigned_to ?? [];
@@ -107,6 +113,12 @@ export default function useTaskModal({
     refreshSingleStatus("out of stock");
   }
 
+  async function handleSetSkip() {
+    if (!selectedTask) return;
+    await updateTaskInstanceSkip(selectedTask.id);
+    refreshSingleStatus("skip");
+  }
+
   return {
     selectedTask,
     showDetailsModal,
@@ -118,5 +130,7 @@ export default function useTaskModal({
     handleSetActiveTask,
     handleSetInactiveTask,
     handleSetOutOfStock,
+    handleEditTask,
+    handleSetSkip,
   };
 }

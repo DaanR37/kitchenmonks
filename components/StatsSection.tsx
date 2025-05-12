@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, TouchableOpacity } from "react-native";
+import { View, StyleSheet, TouchableOpacity, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AppText from "@/components/AppText";
@@ -9,6 +9,12 @@ export type StatsSectionProps = {
   teamMepCount: number;
   myMepCount: number;
   outOfStockCount: number;
+  noStatusCount: number;
+  hasMyMepData: boolean;
+  hasTeamMepData: boolean;
+  hasOutOfStockData: boolean;
+  hasNoStatusData: boolean;
+  hasAllData: boolean;
   isTablet: boolean;
   activeTab: string;
   onTabSelect: (tab: string) => void;
@@ -19,76 +25,119 @@ export default function StatsSection({
   teamMepCount,
   myMepCount,
   outOfStockCount,
+  noStatusCount,
+  hasMyMepData,
+  hasTeamMepData,
+  hasOutOfStockData,
+  hasNoStatusData,
+  hasAllData,
   isTablet,
   activeTab,
   onTabSelect,
 }: StatsSectionProps) {
   const router = useRouter();
 
+  /* Bereken per button of hij actief moet zijn */
+  const isAllActive = hasAllData;
+  const isTeamActive = hasTeamMepData;
+  const isMyActive = hasMyMepData;
+  const isOutOfStockActive = hasOutOfStockData;
+  const isNoStatusActive = hasNoStatusData;
+
   return (
     <View style={[styles.statsContainer, isTablet && styles.statsContainerTablet]}>
-      {/* Rij 1, met "All" (links) en "Team MEP" (rechts) */}
+      {/* Rij 1: All (volledige breedte) */}
+      <TouchableOpacity
+        style={[
+          styles.statBoxFullWidth,
+          !isAllActive && { opacity: 0.7 },
+          isTablet && activeTab === "allTasks" && styles.statBoxActiveAll,
+        ]}
+        disabled={!isAllActive}
+        onPress={() => {
+          if (!isAllActive) return;
+          isTablet ? onTabSelect("allTasks") : router.push("/tasks/allTasks");
+        }}
+      >
+        <View style={styles.statLeft}>
+          <View style={[styles.circle, { backgroundColor: "#0066ff" }, isTablet && styles.circleTablet]}>
+            <Ionicons name="layers-outline" size={15} color="#fff" />
+          </View>
+          <AppText
+            style={[
+              styles.statLabel,
+              isTablet && styles.statLabelTablet,
+              isTablet && activeTab === "allTasks" && styles.statLabelActiveAll,
+            ]}
+          >
+            All
+          </AppText>
+        </View>
+        <AppText
+          style={[
+            styles.statValue,
+            isTablet && styles.statValueTablet,
+            isTablet && activeTab === "allTasks" && styles.statValueActiveAll,
+          ]}
+        >
+          {allPercentage}%
+        </AppText>
+      </TouchableOpacity>
+
+      {/* Rij 2: 2x2 grid met de overige knoppen */}
       <View style={[styles.statsRow, isTablet && styles.statsRowTablet]}>
-        {/* All tasks */}
+        {/* Team MEP */}
         <TouchableOpacity
           style={[
             styles.statBox,
             isTablet && styles.statBoxTablet,
-            isTablet && activeTab === "allTasks" && styles.statBoxActiveAll,
+            !isTeamActive && { opacity: 0.7 },
+            isTablet && activeTab === "teamMep" && styles.statBoxActiveTeamMep,
           ]}
-          onPress={() => (isTablet ? onTabSelect("allTasks") : router.push("/tasks/allTasks"))}
-        >
-          <View style={styles.statLeft}>
-            <View style={[styles.circle, { backgroundColor: "#0066ff" }, isTablet && styles.circleTablet]}>
-              <Ionicons name="layers-outline" size={15} color="#fff" />
-            </View>
-            <AppText
-              style={[
-                styles.statLabel,
-                isTablet && styles.statLabelTablet,
-                isTablet && activeTab === "allTasks" && styles.statLabelActiveAll,
-              ]}
-            >
-              All
-            </AppText>
-          </View>
-          {/* Toon percentage voltooide taken */}
-          <AppText
-            style={[
-              styles.statValue,
-              isTablet && styles.statValueTablet,
-              isTablet && activeTab === "allTasks" && styles.statValueActiveAll,
-            ]}
-          >
-            {allPercentage}%
-          </AppText>
-        </TouchableOpacity>
-
-        {/* Team MEP */}
-        <TouchableOpacity
-          style={[styles.statBox, isTablet && styles.statBoxTablet, isTablet && activeTab === "teamMep" && styles.statBoxActiveTeamMep]}
-          onPress={() => (isTablet ? onTabSelect("teamMep") : router.push("/tasks/teamMep"))}
+          disabled={!isTeamActive}
+          onPress={() => {
+            if (!isTeamActive) return;
+            isTablet ? onTabSelect("teamMep") : router.push("/tasks/teamMep");
+          }}
         >
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#00bb06" }, isTablet && styles.circleTablet]}>
               <Ionicons name="people-outline" size={14} color="#fff" />
             </View>
-            <AppText style={[styles.statLabel, isTablet && styles.statLabelTablet, isTablet && activeTab === "teamMep" && styles.statLabelActiveTeamMep]}>Team MEP</AppText>
+            <AppText
+              style={[
+                styles.statLabel,
+                isTablet && styles.statLabelTablet,
+                isTablet && activeTab === "teamMep" && styles.statLabelActiveTeamMep,
+              ]}
+            >
+              Team MEP
+            </AppText>
           </View>
-          <AppText style={[styles.statValue, isTablet && styles.statValueTablet, isTablet && activeTab === "teamMep" && styles.statValueActiveTeamMep]}>{teamMepCount}</AppText>
+          <AppText
+            style={[
+              styles.statValue,
+              isTablet && styles.statValueTablet,
+              isTablet && activeTab === "teamMep" && styles.statValueActiveTeamMep,
+            ]}
+          >
+            {teamMepCount}
+          </AppText>
         </TouchableOpacity>
-      </View>
 
-      {/* Rij 2, met "My MEP" (links) en "Out of stock" (rechts) */}
-      <View style={[styles.statsRow, isTablet && styles.statsRowTablet]}>
         {/* My MEP */}
         <TouchableOpacity
           style={[
             styles.statBox,
             isTablet && styles.statBoxTablet,
+            !isMyActive && { opacity: 0.7 },
             isTablet && activeTab === "myMep" && styles.statBoxActiveMyMep,
           ]}
-          onPress={() => (isTablet ? onTabSelect("myMep") : router.push("/tasks/myMep"))}
+          disabled={!isMyActive}
+          onPress={() => {
+            if (!isMyActive) return;
+            isTablet ? onTabSelect("myMep") : router.push("/tasks/myMep");
+          }}
         >
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#ff9000" }, isTablet && styles.circleTablet]}>
@@ -114,20 +163,90 @@ export default function StatsSection({
             {myMepCount}
           </AppText>
         </TouchableOpacity>
+      </View>
 
+      {/* Rij 3: 2x2 grid met de overige knoppen */}
+      <View style={[styles.statsRow, isTablet && styles.statsRowTablet]}>
         {/* Out of stock */}
         <TouchableOpacity
-          style={[styles.statBox, isTablet && styles.statBoxTablet, isTablet && activeTab === "outOfStock" && styles.statBoxActiveOutOfStock]}
+          style={[
+            styles.statBox,
+            isTablet && styles.statBoxTablet,
+            !isOutOfStockActive && { opacity: 0.7 },
+            isTablet && activeTab === "outOfStock" && styles.statBoxActiveOutOfStock,
+          ]}
+          disabled={!isOutOfStockActive}
           onPress={() => (isTablet ? onTabSelect("outOfStock") : router.push("/tasks/outOfStock"))}
         >
           <View style={styles.statLeft}>
             <View style={[styles.circle, { backgroundColor: "#FF6347" }, isTablet && styles.circleTablet]}>
               <Ionicons name="cart-outline" size={14} color="#fff" />
             </View>
-            <AppText style={[styles.statLabel, isTablet && styles.statLabelTablet, isTablet && activeTab === "outOfStock" && styles.statLabelActiveOutOfStock]}>Out of stock</AppText>
+            <AppText
+              style={[
+                styles.statLabel,
+                isTablet && styles.statLabelTablet,
+                isTablet && activeTab === "outOfStock" && styles.statLabelActiveOutOfStock,
+              ]}
+            >
+              Out of stock
+            </AppText>
           </View>
           {/* Toon aantal out of stock taken */}
-          <AppText style={[styles.statValue, isTablet && styles.statValueTablet, isTablet && activeTab === "outOfStock" && styles.statValueActiveOutOfStock]}>{outOfStockCount}</AppText>
+          <AppText
+            style={[
+              styles.statValue,
+              isTablet && styles.statValueTablet,
+              isTablet && activeTab === "outOfStock" && styles.statValueActiveOutOfStock,
+            ]}
+          >
+            {outOfStockCount}
+          </AppText>
+        </TouchableOpacity>
+
+        {/* No status */}
+        <TouchableOpacity
+          style={[
+            styles.statBox,
+            isTablet && styles.statBoxTablet,
+            !isNoStatusActive && { opacity: 0.7 },
+            isTablet && activeTab === "noStatus" && styles.statBoxActiveNoStatus,
+          ]}
+          disabled={!isNoStatusActive}
+          onPress={() => {
+            if (!isNoStatusActive) return;
+            isTablet ? onTabSelect("noStatus") : router.push("/tasks/noStatus");
+          }}
+        >
+          <View style={styles.statLeft}>
+            <View
+              style={[
+                styles.circle,
+                { backgroundColor: "transparent", borderColor: "#000", borderWidth: 0.2 },
+                isTablet && styles.circleTablet,
+              ]}
+            >
+              <Ionicons name="help-outline" size={14} color="#000" />
+            </View>
+            <AppText
+              style={[
+                styles.statLabel,
+                isTablet && styles.statLabelTablet,
+                isTablet && activeTab === "noStatus" && styles.statLabelActiveNoStatus,
+              ]}
+            >
+              No status
+            </AppText>
+          </View>
+          <AppText
+            style={[
+              styles.statValue,
+              isTablet && styles.statValueTablet,
+              isTablet && activeTab === "noStatus" && styles.statValueActiveNoStatus,
+            ]}
+          >
+            {noStatusCount}
+          </AppText>
         </TouchableOpacity>
       </View>
     </View>
@@ -138,36 +257,70 @@ const styles = StyleSheet.create({
   statsContainer: {
     marginVertical: 18,
   },
-
-  statsRow: {
+  statBoxFullWidth: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  statBox: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "48%",
-    padding: 12,
+    width: "100%",
+    marginBottom: 8,
     borderRadius: 18,
     borderWidth: 0.5,
     borderColor: "rgba(0, 0, 0, 0.1)",
     backgroundColor: "#ffffff",
+    paddingVertical: Platform.select({
+      ios: 20,
+      android: 14,
+    }),
+    paddingHorizontal: Platform.select({
+      ios: 16,
+      android: 12,
+    }),
+  },
+
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  statBox: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "49%",
+    borderRadius: 18,
+    borderWidth: 0.5,
+    borderColor: "rgba(0, 0, 0, 0.1)",
+    backgroundColor: "#ffffff",
+    paddingVertical: Platform.select({
+      ios: 20,
+      android: 14,
+    }),
+    paddingHorizontal: Platform.select({
+      ios: 16,
+      android: 12,
+    }),
   },
   statLeft: {
     flexDirection: "column",
   },
   circle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
     marginBottom: 7,
     alignItems: "center",
     justifyContent: "center",
+    width: Platform.select({
+      ios: 34,
+      android: 30,
+    }),
+    height: Platform.select({
+      ios: 34,
+      android: 30,
+    }),
+    borderRadius: Platform.select({
+      ios: 17,
+      android: 15,
+    }),
   },
   statLabel: {
-    // marginTop: 2,
-    // marginBottom: 0,
+    marginTop: 2,
+    marginBottom: 0,
     fontSize: 14,
     fontWeight: "500",
     color: "#333",
@@ -176,7 +329,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: "#333",
   },
-
   // -- Tablet view --
   statsContainerTablet: {
     marginVertical: 32,
@@ -230,7 +382,7 @@ const styles = StyleSheet.create({
 
   statBoxActiveMyMep: {
     borderWidth: 2,
-    borderColor: "#fb9000", 
+    borderColor: "#fb9000",
   },
   statLabelActiveMyMep: {
     color: "#fb9000",
@@ -241,12 +393,23 @@ const styles = StyleSheet.create({
 
   statBoxActiveOutOfStock: {
     borderWidth: 2,
-    borderColor: "#f36146", // mooie groene tint, kies zelf wat je wilt
+    borderColor: "#f36146",
   },
   statLabelActiveOutOfStock: {
     color: "#f36146",
   },
   statValueActiveOutOfStock: {
     color: "#f36146",
+  },
+
+  statBoxActiveNoStatus: {
+    borderWidth: 2,
+    borderColor: "#a9a9a9", // grijs
+  },
+  statLabelActiveNoStatus: {
+    color: "#a9a9a9",
+  },
+  statValueActiveNoStatus: {
+    color: "#a9a9a9",
   },
 });

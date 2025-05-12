@@ -8,6 +8,7 @@ type Task = {
   task_name: string;
   start_date: string;
   end_date: string;
+  assigned_to?: string[];
 };
 
 export type SectionData = {

@@ -100,12 +100,13 @@ export default function LoginScreen() {
     >
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}>
         <View style={styles.container}>
-          {/* Logo KM hier */}
+          {/* kitchenmonks logo */}
           <View style={styles.logoContainer}>
             <Image source={require("../../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
             <AppText style={styles.title}>KITCHENMONKS</AppText>
           </View>
 
+          {/* Log-in form */}
           <View style={styles.buttonContainer}>
             <AppText style={styles.subtitle}>Welcome to KitchenMonks - Let's create your account</AppText>
             <View style={styles.inputContainer}>
@@ -119,6 +120,7 @@ export default function LoginScreen() {
               />
             </View>
 
+            {/* Log-in button */}
             <TouchableOpacity style={styles.button} onPress={handleLogin}>
               <AppText style={styles.buttonText}>Log in</AppText>
             </TouchableOpacity>

@@ -54,6 +54,8 @@ export default function OutOfStockTabletView() {
     handleSetActiveTask,
     handleSetInactiveTask,
     handleSetOutOfStock,
+    handleEditTask,
+    handleSetSkip,
   } = useTaskModal({ sections, setSections });
 
   async function loadData() {
@@ -182,6 +184,8 @@ export default function OutOfStockTabletView() {
         cleanTaskName={cleanTaskName}
         generateInitials={generateInitials}
         getColorFromId={getColorFromId}
+        onEditTask={handleEditTask}
+        onSetSkip={handleSetSkip}
       />
     </View>
   );
