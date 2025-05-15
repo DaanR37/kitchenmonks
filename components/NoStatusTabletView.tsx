@@ -12,6 +12,7 @@ import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
 import AppText from "@/components/AppText";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
+import LoadingSpinner from "./LoadingSpinner";
 
 export default function NoStatusTabletView() {
   const { user } = useContext(AuthContext);
@@ -116,7 +117,7 @@ export default function NoStatusTabletView() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <AppText>Loading my tasks for {selectedDate}...</AppText>
+        <LoadingSpinner />
       </View>
     );
   }

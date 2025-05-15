@@ -13,6 +13,7 @@ import { TaskRow, SectionData } from "@/hooks/useTaskModal";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
+import LoadingSpinner from "./LoadingSpinner";
 
 export default function TeamMepTabletView() {
   const { user } = useContext(AuthContext);
@@ -126,7 +127,7 @@ export default function TeamMepTabletView() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <AppText>Loading tasks for {selectedDate}...</AppText>
+        <LoadingSpinner />
       </View>
     );
   }

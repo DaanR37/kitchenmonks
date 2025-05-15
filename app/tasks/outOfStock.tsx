@@ -13,6 +13,7 @@ import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
 import AppText from "@/components/AppText";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function OutOfStockScreen() {
   const router = useRouter();
@@ -99,30 +100,27 @@ export default function OutOfStockScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <AppText>Loading my tasks for {selectedDate}...</AppText>
+        <LoadingSpinner />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <AppText style={styles.headerText}>Out of Stock</AppText>
-      </View>
-
-      <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <View style={styles.backButtonCircle}>
-            <Ionicons name="chevron-back" size={14} color="#333" />
-          </View>
+      {/* Back button & headerText */}
+      <View style={styles.backButtonHeaderContainer}>
+        <TouchableOpacity style={styles.backButtonCircle} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={14} color="#333" />
         </TouchableOpacity>
+        <AppText style={styles.headerText}>Out of Stock</AppText>
       </View>
 
       {/* FlatList met secties en hun taken (gefilterd op activeProfile) */}
       <FlatList
         data={sections}
         keyExtractor={(sec) => sec.id}
+        keyboardShouldPersistTaps="always"
+        showsVerticalScrollIndicator={false}
         renderItem={({ item: sec }) => (
           <View style={styles.sectionContainer}>
             <AppText style={styles.sectionTitle}>{sec.section_name}</AppText>
@@ -208,30 +206,38 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f6f6f6",
-    paddingVertical: Platform.select({
+    paddingTop: Platform.select({
       ios: 85,
       android: 35,
     }),
   },
-  headerRow: {
+
+  /* Back button */
+  backButtonHeaderContainer: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
+    justifyContent: "center",
+    marginBottom: 35,
   },
-  headerText: { fontSize: 18, fontWeight: "bold" },
   backButtonCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    position: "absolute",
+    left: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#e0e0e0dc", // zachtgrijs
+    backgroundColor: "#e0e0e0dc",
   },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { alignItems: "center", marginBottom: 8 },
-  backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 12 },
-  backText: { fontSize: 17, color: "#666", marginLeft: 4 },
+  headerText: {
+    position: "absolute",
+    fontSize: 19,
+    fontWeight: "bold",
+    justifyContent: "center",
+  },
 
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   sectionContainer: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
@@ -241,6 +247,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
 
+  /* Tasks */
   taskItemRow: {
     flexDirection: "row",
     alignItems: "center",

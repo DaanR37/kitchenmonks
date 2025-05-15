@@ -13,6 +13,7 @@ import { TaskRow, SectionData } from "@/hooks/useTaskModal";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
+import LoadingSpinner from "./LoadingSpinner";
 
 export default function OutOfStockTabletView() {
   const { user } = useContext(AuthContext);
@@ -97,7 +98,7 @@ export default function OutOfStockTabletView() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <AppText>Loading my tasks for {selectedDate}...</AppText>
+        <LoadingSpinner />
       </View>
     );
   }

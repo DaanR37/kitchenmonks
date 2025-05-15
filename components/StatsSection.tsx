@@ -207,8 +207,8 @@ export default function StatsSection({
         {/* No status */}
         <TouchableOpacity
           style={[
-            styles.statBox,
-            isTablet && styles.statBoxTablet,
+            styles.statBoxNoStatus,
+            isTablet && styles.statBoxTabletNoStatus,
             !isNoStatusActive && { opacity: 0.7 },
             isTablet && activeTab === "noStatus" && styles.statBoxActiveNoStatus,
           ]}
@@ -222,7 +222,7 @@ export default function StatsSection({
             <View
               style={[
                 styles.circle,
-                { backgroundColor: "transparent", borderColor: "#000", borderWidth: 0.2 },
+                { backgroundColor: "#ececec" },
                 isTablet && styles.circleTablet,
               ]}
             >
@@ -298,6 +298,23 @@ const styles = StyleSheet.create({
       android: 12,
     }),
   },
+  statBoxNoStatus: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "49%",
+    borderRadius: 18,
+    borderWidth: 0.5,
+    borderColor: "rgba(0, 0, 0, 0.1)",
+    backgroundColor: "#f6f6f6",
+    paddingVertical: Platform.select({
+      ios: 20,
+      android: 14,
+    }),
+    paddingHorizontal: Platform.select({
+      ios: 16,
+      android: 12,
+    }),
+  },
   statLeft: {
     flexDirection: "column",
   },
@@ -321,8 +338,7 @@ const styles = StyleSheet.create({
   statLabel: {
     marginTop: 2,
     marginBottom: 0,
-    fontSize: 14,
-    fontWeight: "500",
+    fontSize: 16,
     color: "#333",
   },
   statValue: {
@@ -341,6 +357,13 @@ const styles = StyleSheet.create({
     paddingVertical: 21,
     borderRadius: 18,
     borderWidth: 0.5,
+  },
+  statBoxTabletNoStatus: {
+    width: "48%",
+    paddingVertical: 21,
+    borderRadius: 18,
+    borderWidth: 0.5,
+    backgroundColor: "#f6f6f6",
   },
 
   circleTablet: {

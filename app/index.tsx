@@ -12,6 +12,7 @@ import {
   Platform,
   Pressable,
   useWindowDimensions,
+  FlatList,
   ScrollView,
 } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
@@ -20,7 +21,6 @@ import { DateContext } from "@/services/DateContext";
 import { fetchSections, createSection } from "@/services/api/sections";
 import DateSelector, { formatDateString } from "@/components/DateSelector";
 import StatsSection from "@/components/StatsSection";
-import SectionItems, { SectionData } from "@/components/SectionItems";
 import {
   fetchAllDonePercentage,
   fetchActiveTasksCount,
@@ -38,6 +38,24 @@ import MyMepTabletView from "@/components/MyMepTabletView";
 import OutOfStockTabletView from "@/components/OutOfStockTabletView";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import NoStatusTabletView from "@/components/NoStatusTabletView";
+import LoadingSpinner from "@/components/LoadingSpinner";
+
+type Task = {
+  id: string;
+  status: string;
+  task_name: string;
+  start_date: string;
+  end_date: string;
+  assigned_to?: string[];
+};
+
+type SectionData = {
+  id: string;
+  section_name: string;
+  start_date: string;
+  end_date: string;
+  task_templates: Task[];
+};
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -331,15 +349,6 @@ export default function HomeScreen() {
     );
   };
 
-  if (loading || loadingSections) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
-        <AppText>Loading...</AppText>
-      </View>
-    );
-  }
-
   const tabTitles = {
     allTasks: "All",
     teamMep: "Team MEP",
@@ -348,6 +357,14 @@ export default function HomeScreen() {
     noStatus: "No Status",
   };
   const activeTabTitle = tabTitles[activeTab];
+
+  if (loading || loadingSections) {
+    return (
+      <View style={styles.loadingContainer}>
+        <LoadingSpinner />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, isTabletLandscape && styles.containerTablet]}>
@@ -386,8 +403,12 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {/* StatsSection voor mobiel EN in de sidebar op tablet view */}
-          <View style={{ width: "100%" }}>
+          {/* ----------- Scrollbare content: stats + sections + add button ----------- */}
+          <ScrollView
+            keyboardShouldPersistTaps="always"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Stats bovenin */}
             <StatsSection
               allPercentage={allPercentage}
               teamMepCount={teamMepCount}
@@ -405,29 +426,43 @@ export default function HomeScreen() {
                 setActiveTab(tab as "allTasks" | "teamMep" | "myMep" | "outOfStock" | "noStatus")
               }
             />
-          </View>
 
-          {/* SectionItems voor mobiel EN in de sidebar op tablet view */}
-          <View style={[styles.listContainer, isTabletLandscape && styles.listContainerTablet]}>
-            <TouchableOpacity
-              style={[styles.addSectionButton, isTabletLandscape && styles.addSectionButtonTablet]}
-              onPress={() => setShowAddModal(true)}
-            >
-              <View style={[styles.plusCircle, isTabletLandscape && styles.plusCircleTablet]}>
-                <Ionicons name="add" size={15} style={{ opacity: 0.5, color: "#333" }} />
-              </View>
-              <AppText style={[styles.addSectionText, isTabletLandscape && styles.addSectionTextTablet]}>
-                Voeg menu-item toe
-              </AppText>
-            </TouchableOpacity>
+            {/* De gezamenlijke container met add-button én section list */}
+            <View style={[styles.listContainer, isTabletLandscape && styles.listContainerTablet]}>
+              {/* Add button */}
+              <TouchableOpacity
+                style={[styles.addSectionButton, isTabletLandscape && styles.addSectionButtonTablet]}
+                onPress={() => setShowAddModal(true)}
+              >
+                <View style={[styles.plusCircle, isTabletLandscape && styles.plusCircleTablet]}>
+                  <Ionicons name="add" size={15} style={{ opacity: 0.5, color: "#333" }} />
+                </View>
+                <AppText style={[styles.addSectionText, isTabletLandscape && styles.addSectionTextTablet]}>
+                  Voeg menu-item toe
+                </AppText>
+              </TouchableOpacity>
 
-            <SectionItems
-              sections={sections}
-              onPressSection={handlePressSection}
-              activeTasksCountPerSection={activeTasksCountPerSection}
-            />
-          </View>
+              {/* Manual render van de lijst met sections */}
+              {sections.map((section: SectionData) => (
+                <TouchableOpacity
+                  key={section.id}
+                  style={[styles.sectionItem, isTabletLandscape && styles.sectionItemTablet]}
+                  onPress={() => handlePressSection(section.id)}
+                >
+                  <View style={[styles.countCircle, isTabletLandscape && styles.countCircleTablet]}>
+                    <AppText style={[styles.count, isTabletLandscape && styles.countTablet]}>
+                      {activeTasksCountPerSection[section.id] ?? 0}
+                    </AppText>
+                  </View>
+                  <AppText style={[styles.sectionName, isTabletLandscape && styles.sectionNameTablet]}>
+                    {section.section_name}
+                  </AppText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
 
+          {/* Modal */}
           {renderAddSectionModal()}
         </View>
       ) : null}
@@ -478,9 +513,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f6f6f6",
     paddingHorizontal: 22,
-    paddingVertical: Platform.select({
+    paddingTop: Platform.select({
       ios: 60,
-      android: 35,
+      android: 25,
     }),
   },
   containerTablet: {
@@ -498,15 +533,25 @@ const styles = StyleSheet.create({
   // -- Modal styling  -> Modal moet ook in een reusable component & styling moet gescheiden zijn van beide views --
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
     justifyContent: "flex-end",
+    backgroundColor: "transparent",
   },
   modalContent: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 15,
+    paddingTop: 20,
+    paddingBottom: 0,
     backgroundColor: "#fff",
-    padding: 16,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    paddingTop: 30,
+
+    // ✅ Shadow voor iOS:
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+
+    // ✅ Elevation voor Android:
+    elevation: 12,
   },
   modalTitle: {
     fontSize: 16,
@@ -574,7 +619,7 @@ const styles = StyleSheet.create({
 
   // -- Linker Kolom styling (mobiel) --
   leftColumn: {
-    flex: 0.5,
+    flex: 1,
   },
   header: {
     flexDirection: "row",
@@ -590,6 +635,10 @@ const styles = StyleSheet.create({
     marginTop: Platform.select({
       ios: 10,
     }),
+    marginBottom: Platform.select({
+      ios: 10,
+      android: 15,
+    }),
   },
   headerTablet: {
     // marginVertical: 24,
@@ -602,16 +651,16 @@ const styles = StyleSheet.create({
   },
   avatarCircle: {
     width: Platform.select({
-      ios: 34,
-      android: 30,
+      ios: 36,
+      android: 32,
     }),
     height: Platform.select({
-      ios: 34,
-      android: 30,
+      ios: 36,
+      android: 32,
     }),
     borderRadius: Platform.select({
-      ios: 17,
-      android: 15,
+      ios: 18,
+      android: 16,
     }),
     justifyContent: "center",
     alignItems: "center",
@@ -681,7 +730,7 @@ const styles = StyleSheet.create({
   listContainerTablet: {
     width: "100%",
     height: "auto",
-    paddingVertical: 12.5,
+    paddingTop: 12.5,
   },
   addSectionButtonTablet: {
     marginVertical: 12,
@@ -696,5 +745,48 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#666",
     opacity: 0.8,
+  },
+
+  sectionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    marginVertical: 6,
+    borderRadius: 8,
+  },
+  countCircle: {
+    width: 28,
+    height: 28,
+    marginRight: 12,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+  },
+  count: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+  },
+  sectionName: {
+    fontSize: 14,
+    color: "#333",
+  },
+
+  // -- Tablet view --
+  sectionItemTablet: {
+    // paddingHorizontal: 16,
+    marginVertical: 12,
+  },
+  countCircleTablet: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  countTablet: {
+    fontSize: 18,
+  },
+  sectionNameTablet: {
+    fontSize: 18,
   },
 });

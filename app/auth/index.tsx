@@ -1,26 +1,72 @@
-import React from "react";
-import { View, StyleSheet, TouchableOpacity, Image } from "react-native";
+import React, { useRef, useEffect } from "react";
+import { View, StyleSheet, TouchableOpacity, Image, Animated, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import AppText from "@/components/AppText";
+
 export default function AuthChooseScreen() {
   const router = useRouter();
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.6)).current;
+  const textOpacity = useRef(new Animated.Value(0)).current;
+  const textOpacitySubtitle = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(logoOpacity, {
+          toValue: 1,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(logoScale, {
+          toValue: 1,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(textOpacity, {
+        toValue: 1,
+        duration: 700,
+        delay: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(textOpacitySubtitle, {
+        toValue: 1,
+        duration: 600,
+        delay: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   return (
     <View style={styles.container}>
-      {/* Logo KM hier */}
+      {/* Logo & titel */}
       <View style={styles.logoContainer}>
-        <Image source={require("../../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
-        <AppText style={styles.title}>KITCHENMONKS</AppText>
+        <Animated.Image
+          source={require("../../assets/images/KITCHENMONKSLOGOX.png")}
+          style={[
+            styles.logo,
+            {
+              opacity: logoOpacity,
+              transform: [{ scale: logoScale }],
+            },
+          ]}
+        />
+        <Animated.Text style={[styles.title, { opacity: textOpacity }]}>KITCHENMONKS</Animated.Text>
+        <Animated.Text style={[styles.subtitle, { opacity: textOpacitySubtitle }]}>
+          Welcome to KitchenMonks - Let's create your account or log in!
+        </Animated.Text>
       </View>
 
-      {/* Knop voor login */}
+      {/* Buttons voor login en signup */}
       <View style={styles.buttonContainer}>
-        <AppText style={styles.subtitle}>Welcome to KitchenMonks - Let's create your account</AppText>
+        {/* Button voor login */}
         <TouchableOpacity style={styles.button} onPress={() => router.push("/auth/login")}>
           <AppText style={styles.buttonText}>Log in</AppText>
         </TouchableOpacity>
 
-        {/* Knop voor signup */}
+        {/* Button voor signup */}
         <TouchableOpacity
           style={[styles.button, styles.signupButton]}
           onPress={() => router.push("/auth/signup")}
@@ -35,14 +81,18 @@ export default function AuthChooseScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    justifyContent: "space-around",
+    margin: 12,
     backgroundColor: "#f2f1f6",
   },
+
+  /* logo & subtitle */
   logoContainer: {
+    position: "absolute",
+    top: "25%",
+    transform: [{ translateY: "-25%" }],
+    left: 0,
+    right: 0,
     alignItems: "center",
-    justifyContent: "center",
-    // marginBottom: 12,
   },
   logo: {
     width: 100,
@@ -52,21 +102,33 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
+    fontWeight: "600",
     color: "black",
-    marginBottom: 12,
     textAlign: "center",
   },
   subtitle: {
     fontSize: 16,
     color: "#aaa",
-    marginBottom: 24,
     textAlign: "center",
-    marginTop: 12,
-    marginHorizontal: 24,
+    marginVertical: Platform.select({
+      ios: 12,
+      android: 16,
+    }),
+    marginHorizontal: Platform.select({
+      ios: 60,
+      android: 40,
+    }),
   },
+
+  /* buttons */
   buttonContainer: {
-    justifyContent: "center",
+    position: "absolute",
+    bottom: "5%",
+    transform: [{ translateY: "5%" }],
+    left: 0,
+    right: 0,
     alignItems: "center",
+    backgroundColor: "#f2f1f6",
   },
   button: {
     width: "80%",
@@ -76,13 +138,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#000",
   },
-  signupButton: {
-    backgroundColor: "#ffffff",
-  },
   buttonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
     alignSelf: "center",
+  },
+
+  /* signup button */
+  signupButton: {
+    backgroundColor: "#ffffff",
   },
 });

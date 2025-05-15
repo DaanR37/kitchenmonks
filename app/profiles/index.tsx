@@ -16,6 +16,7 @@ import { createProfile, fetchProfiles, updateProfile, deleteProfile } from "@/se
 import { ProfileContext, ProfileData } from "@/services/ProfileContext";
 import { supabase } from "@/services/supabaseClient";
 import AppText from "@/components/AppText";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function ChooseProfileScreen() {
   const router = useRouter();
@@ -181,7 +182,7 @@ export default function ChooseProfileScreen() {
         </TouchableOpacity>
 
         {/* Drie puntjes-knop rechts (kebab menu) */}
-        <TouchableOpacity style={styles.moreButton} onPress={() => handleShowEditModal(item)}>
+        <TouchableOpacity onPress={() => handleShowEditModal(item)}>
           <Ionicons name="ellipsis-horizontal" size={22} color="#666" />
         </TouchableOpacity>
       </View>
@@ -287,20 +288,19 @@ export default function ChooseProfileScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <AppText>Loading profiles...</AppText>
+        <LoadingSpinner />
       </View>
     );
   }
 
   return (
-    <View style={styles.mainContainer}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.replace("/auth")}>
-          <View style={styles.backButtonCircle}>
-            <Ionicons name="chevron-back" size={14} color="#333" />
-          </View>
+    <View style={styles.container}>
+      {/* Back button & headerText */}
+      <View style={styles.backButtonHeaderContainer}>
+        <TouchableOpacity style={styles.backButtonCircle} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={14} color="#333" />
         </TouchableOpacity>
-        {/* <AppText style={styles.title}>Kies je profiel</AppText> */}
+        <AppText style={styles.headerText}>Profielen</AppText>
       </View>
 
       <FlatList
@@ -309,7 +309,7 @@ export default function ChooseProfileScreen() {
         renderItem={renderProfileItem}
         ListEmptyComponent={() => <AppText style={styles.emptyText}>Geen profielen gevonden.</AppText>}
         keyboardShouldPersistTaps="always"
-        contentContainerStyle={{ paddingBottom: 120, paddingTop: 30 }}
+        showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <TouchableOpacity style={styles.addProfileButton} onPress={() => setShowAddModal(true)}>
             <AppText style={styles.addProfileText}>+ Voeg kok toe</AppText>
@@ -323,93 +323,79 @@ export default function ChooseProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  mainContainer: {
+  container: {
     flex: 1,
     backgroundColor: "#f6f6f6",
-    paddingVertical: Platform.select({
-      ios: 75,
-      android: 15,
+    paddingTop: Platform.select({
+      ios: 85,
+      android: 35,
     }),
   },
+
+  /* Back button */
+  backButtonHeaderContainer: {
+    position: "relative",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 35,
+  },
+  backButtonCircle: {
+    position: "absolute",
+    left: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e0e0e0dc",
+  },
+  headerText: {
+    position: "absolute",
+    fontSize: 19,
+    fontWeight: "bold",
+    justifyContent: "center",
+  },
+
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    // paddingTop: 16,
-    // paddingBottom: 8,
-    // paddingVertical: Platform.select({
-    //   ios: 10,
-    //   android: 5,
-    // }),
-    marginTop: Platform.select({
-      ios: 10,
-      android: 5,
-    }),
-  },
-  backButton: {
-    marginRight: 8,
-  },
-  backButtonCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#e0e0e0", // zachte grijze cirkel
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 17,
-    color: "#333",
-    fontWeight: "600",
-  },
+
   /* Profielrij in de FlatList: links item, rechts de 3-puntjes */
   profileRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
-    // paddingHorizontal: 12,
-    // paddingVertical: 10,
-    borderRadius: 12,
-    marginBottom: 8,
     marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: "#fff",
   },
   profileItem: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 12,
-    // marginBottom: 8,
-    // marginHorizontal: 16,
-  },
-  moreButton: {
-    padding: 4,
-    marginLeft: 6,
-    marginRight: 16,
   },
 
   initialsCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 10,
   },
   initialsText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
   },
   profileName: {
-    fontSize: 16,
+    fontSize: 18,
     color: "#333",
     fontWeight: "bold",
   },
@@ -419,7 +405,7 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
 
-  /** “+ Voeg kok toe” button */
+  /* “+ Voeg kok toe” button */
   addProfileButton: {
     flexDirection: "row",
     alignItems: "center",

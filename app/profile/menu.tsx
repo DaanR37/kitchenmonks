@@ -19,13 +19,12 @@ export default function ProfileMenuScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header / Titel + Back-button */}
-      <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.push("/")}>
-          <View style={styles.backButtonCircle}>
-            <Ionicons name="chevron-back" size={14} color="#333" />
-          </View>
+      {/* Back button & headerText */}
+      <View style={styles.backButtonHeaderContainer}>
+        <TouchableOpacity style={styles.backButtonCircle} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={14} color="#333" />
         </TouchableOpacity>
+        <AppText style={styles.headerText}>Menu</AppText>
       </View>
 
       {/* Profielen */}
@@ -76,47 +75,46 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f6f6f6",
-    paddingHorizontal: 20,
     paddingVertical: Platform.select({
       ios: 85,
       android: 35,
     }),
   },
-  backButton: {
-    marginBottom: 10,
-    marginRight: 12, // optioneel als je hem wilt scheiden van de tekst
-  },
-  backButtonCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#e0e0e0dc", // zachtgrijs
-  },
-  headerRow: {
+
+  /* Back button */
+  backButtonHeaderContainer: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
+    justifyContent: "center",
+    marginBottom: 35,
+  },
+  backButtonCircle: {
+    position: "absolute",
+    left: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e0e0e0dc",
   },
   headerText: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#333",
-    marginLeft: 8, // ruimte tussen chevron en 'Profiel'
+    position: "absolute",
+    fontSize: 19,
+    fontWeight: "bold",
+    justifyContent: "center",
   },
-  backButtonText: {
-    fontSize: 16,
-    color: "#333",
-    marginLeft: 4,
-  },
+
+  /* Menu items */
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginBottom: 12,
     padding: 16,
     borderRadius: 8,
-    marginBottom: 12,
+    backgroundColor: "#fff",
   },
   menuItemText: {
     flex: 1,

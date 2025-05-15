@@ -37,6 +37,7 @@ import useTaskModal, { TaskRow, SectionData } from "@/hooks/useTaskModal";
 import { STATUS_META } from "@/constants/statusMeta";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
 import TaskDetailsModal from "@/components/TaskDetailsModal";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function SingleSectionScreen() {
   const router = useRouter();
@@ -241,19 +242,19 @@ export default function SingleSectionScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <AppText>Loading my tasks for {selectedDate}...</AppText>
+        <LoadingSpinner />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <View style={styles.backButtonCircle}>
-            <Ionicons name="chevron-back" size={14} color="#333" />
-          </View>
+      {/* Back button & headerText */}
+      <View style={styles.backButtonHeaderContainer}>
+        <TouchableOpacity style={styles.backButtonCircle} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={14} color="#333" />
         </TouchableOpacity>
+        {/* <AppText style={styles.headerText}>{sections[0].section_name}</AppText> */}
       </View>
 
       {/* FlatList met secties en taken (gefilterd op done/in progress) */}
@@ -385,10 +386,34 @@ const styles = StyleSheet.create({
       android: 35,
     }),
   },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  backButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 12 },
-  backText: { fontSize: 17, color: "#666", marginLeft: 4 },
 
+  /* Back button */
+  backButtonHeaderContainer: {
+    position: "relative",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 35,
+  },
+  backButtonCircle: {
+    position: "absolute",
+    left: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e0e0e0dc",
+  },
+  headerText: {
+    position: "absolute",
+    fontSize: 19,
+    fontWeight: "bold",
+    justifyContent: "center",
+  },
+
+  /* Loading */
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   sectionContainer: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
@@ -401,13 +426,29 @@ const styles = StyleSheet.create({
   /* Add task button */
   addTaskButton: { marginTop: 16, paddingVertical: 0 },
   addTaskText: { color: "#666" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "flex-end" },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "transparent",
+  },
   modalContent: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 15,
+    paddingVertical: Platform.select({
+      ios: 35,
+      android: 15,
+    }),
     backgroundColor: "#fff",
-    padding: 16,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    paddingTop: 30,
+
+    // ✅ Shadow voor iOS:
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+
+    // ✅ Elevation voor Android:
+    elevation: 12,
   },
   modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10, color: "#333" },
   input: { backgroundColor: "#f2f2f2", padding: 8, borderRadius: 6, marginBottom: 12 },
@@ -479,13 +520,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 20,
-  },
-  backButtonCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#e0e0e0dc", // zachtgrijs
   },
 });

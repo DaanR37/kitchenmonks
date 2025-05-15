@@ -12,6 +12,7 @@ import {
 import { supabase } from "@/services/supabaseClient";
 import { useRouter } from "expo-router";
 import AppText from "@/components/AppText";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -60,22 +61,37 @@ export default function SignupScreen() {
     >
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}>
         <View style={styles.container}>
-          {/* Logo KM hier */}
+          {/* back button */}
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <View style={styles.backButtonCircle}>
+              <Ionicons name="chevron-back" size={14} color="#333" />
+            </View>
+          </TouchableOpacity>
+
+          {/* kitchenmonks logo */}
           <View style={styles.logoContainer}>
             <Image source={require("../../assets/images/KITCHENMONKSLOGOX.png")} style={styles.logo} />
             <AppText style={styles.title}>KITCHENMONKS</AppText>
+            <AppText style={styles.subtitle}>Welcome to KitchenMonks - Let's sign you up!</AppText>
           </View>
 
+          {/* signup form */}
           <View style={styles.buttonContainer}>
-            <AppText style={styles.subtitle}>Welcome to KitchenMonks - Let's create your account</AppText>
             <View style={styles.inputContainer}>
-              <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+              <TextInput
+                placeholder="Email"
+                value={email}
+                onChangeText={setEmail}
+                style={styles.input}
+                placeholderTextColor="#666"
+              />
               <TextInput
                 placeholder="Wachtwoord"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
                 style={styles.input}
+                placeholderTextColor="#666"
               />
               <TextInput
                 placeholder="Herhaal wachtwoord"
@@ -83,16 +99,18 @@ export default function SignupScreen() {
                 onChangeText={setConfirmPassword}
                 secureTextEntry
                 style={styles.input}
+                placeholderTextColor="#666"
               />
               <TextInput
-                placeholder="Kitchen Name"
-                value={kitchenName}
-                onChangeText={setKitchenName}
+                placeholder="Your Name"
+                value={name}
+                onChangeText={setName}
                 style={styles.input}
+                placeholderTextColor="#666"
               />
-              <TextInput placeholder="Your Name" value={name} onChangeText={setName} style={styles.input} />
             </View>
 
+            {/* signup button */}
             <TouchableOpacity style={styles.button} onPress={handleSignup}>
               <AppText style={styles.buttonText}>Sign Up</AppText>
             </TouchableOpacity>
@@ -106,14 +124,43 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    justifyContent: "space-around",
+    margin: 12,
     backgroundColor: "#f2f1f6",
   },
-  logoContainer: {
+
+  /* back button */
+  backButton: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: Platform.select({
+      ios: 24,
+      android: 24,
+    }),
+    marginTop: Platform.select({
+      ios: 75,
+      android: 20,
+    }),
+  },
+  backButtonCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    // marginBottom: 12,
+    backgroundColor: "#e0e0e0dc",
+  },
+
+  /* logo & subtitle */
+  logoContainer: {
+    position: "absolute",
+    top: "25%",
+    transform: [{ translateY: "-25%" }],
+    left: 0,
+    right: 0,
+    alignItems: "center",
   },
   logo: {
     width: 100,
@@ -130,28 +177,34 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: "#aaa",
-    marginBottom: 24,
     textAlign: "center",
-    marginTop: 12,
-    marginHorizontal: 24,
+    marginVertical: Platform.select({
+      ios: 12,
+      android: 16,
+    }),
+    marginHorizontal: Platform.select({
+      ios: 60,
+      android: 40,
+    }),
   },
+
+  /* buttons */
   buttonContainer: {
-    justifyContent: "center",
+    position: "absolute",
+    bottom: "5%",
+    transform: [{ translateY: "5%" }],
+    left: 0,
+    right: 0,
     alignItems: "center",
-  },
-  inputContainer: {
-    width: "80%",
-  },
-  input: {
-    backgroundColor: "#fff",
-    marginVertical: 8,
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: "#f2f1f6",
   },
   button: {
     width: "80%",
     padding: 16,
-    marginVertical: 8,
+    marginTop: Platform.select({
+      ios: 18,
+      android: 16,  
+    }),
     borderRadius: 50,
     alignItems: "center",
     backgroundColor: "#000",
@@ -162,9 +215,15 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     alignSelf: "center",
   },
-  backText: {
-    marginTop: 16,
-    color: "#999",
-    fontSize: 14,
+
+  /* input */
+  inputContainer: {
+    width: "80%",
+  },
+  input: {
+    backgroundColor: "#fff",
+    marginVertical: 8,
+    padding: 12,
+    borderRadius: 8,
   },
 });
