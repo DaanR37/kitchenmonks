@@ -229,21 +229,22 @@ export default function NoStatusScreen() {
 
       <TaskDetailsModal
         visible={showDetailsModal}
-        onClose={closeModal}
         selectedTask={selectedTask}
         allProfiles={allProfiles}
         STATUS_META={STATUS_META}
+        cleanTaskName={cleanTaskName}
+        closeModal={closeModal}
+        generateInitials={generateInitials}
+        getColorFromId={getColorFromId}
         onAssignToggle={handleToggleAssignTask}
         onSetDone={handleSetDone}
         onSetInProgress={handleSetInProgress}
         onSetActive={handleSetActiveTask}
         onSetInactive={handleSetInactiveTask}
         onSetOutOfStock={handleSetOutOfStock}
-        onEditTask={handleEditTask}
         onSetSkip={handleSetSkip}
-        cleanTaskName={cleanTaskName}
-        generateInitials={generateInitials}
-        getColorFromId={getColorFromId}
+        handleEditTask={handleEditTask}
+        onClose={closeModal}
       />
     </View>
   );

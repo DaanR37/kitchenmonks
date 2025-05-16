@@ -1,10 +1,19 @@
 import React, { useState, useEffect, useContext } from "react";
-import { View, StyleSheet, TouchableOpacity, FlatList, Pressable, Platform } from "react-native";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  Pressable,
+  Platform,
+  Modal,
+  KeyboardAvoidingView,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
-import { fetchSections } from "@/services/api/sections";
+import { deleteSectionWithCheck, fetchSections, updateSection } from "@/services/api/sections";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
 import useTaskModal, { TaskRow, SectionData } from "@/hooks/useTaskModal";
@@ -113,7 +122,7 @@ export default function AllTasksScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-       <LoadingSpinner />
+        <LoadingSpinner />
       </View>
     );
   }
@@ -194,21 +203,22 @@ export default function AllTasksScreen() {
 
       <TaskDetailsModal
         visible={showDetailsModal}
-        onClose={closeModal}
         selectedTask={selectedTask}
         allProfiles={allProfiles}
         STATUS_META={STATUS_META}
+        cleanTaskName={cleanTaskName}
+        closeModal={closeModal}
+        generateInitials={generateInitials}
+        getColorFromId={getColorFromId}
         onAssignToggle={handleToggleAssignTask}
         onSetDone={handleSetDone}
         onSetInProgress={handleSetInProgress}
         onSetActive={handleSetActiveTask}
         onSetInactive={handleSetInactiveTask}
         onSetOutOfStock={handleSetOutOfStock}
-        cleanTaskName={cleanTaskName}
-        generateInitials={generateInitials}
-        getColorFromId={getColorFromId}
-        onEditTask={handleEditTask}
         onSetSkip={handleSetSkip}
+        handleEditTask={handleEditTask}
+        onClose={closeModal}
       />
     </View>
   );
@@ -250,7 +260,11 @@ const styles = StyleSheet.create({
   },
 
   /* Loading */
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   sectionContainer: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -312,5 +326,32 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",
+  },
+
+  // -- Modal styling --
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "transparent",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    padding: 16,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    paddingTop: 30,
+    // Shadow voor iOS:
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    // Elevation voor Android:
+    elevation: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+    color: "#333",
   },
 });

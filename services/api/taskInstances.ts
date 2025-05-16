@@ -66,6 +66,14 @@ export async function updateTaskInstanceStatus(taskInstanceId: string, newStatus
   return data;
 }
 
+export async function deleteTaskInstance(taskInstanceId: string) {
+  const { error } = await supabase
+    .from("task_instances")
+    .delete()
+    .eq("id", taskInstanceId);
+  if (error) throw error;
+}
+
 /*
   assignTaskInstance:
   - Doel: Wijs een taakinstance toe aan een specifiek profiel.

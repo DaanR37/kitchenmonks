@@ -119,11 +119,12 @@ export default function LoginScreen() {
           <View style={styles.buttonContainer}>
             <View style={styles.inputContainer}>
               <TextInput
+                style={styles.input}
                 placeholder="Email"
                 value={email}
                 onChangeText={setEmail}
-                style={styles.input}
                 placeholderTextColor="#666"
+                autoCorrect={false}
               />
               <TextInput
                 placeholder="wachtwoord"
@@ -132,6 +133,7 @@ export default function LoginScreen() {
                 secureTextEntry
                 style={styles.input}
                 placeholderTextColor="#666"
+                autoCorrect={false}
               />
             </View>
 
@@ -213,6 +215,18 @@ const styles = StyleSheet.create({
     }),
   },
 
+  /* input */
+  inputContainer: {
+    width: "80%",
+  },
+  input: {
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    fontSize: 16,
+    backgroundColor: "#fff",
+  },
+
   /* buttons */
   buttonContainer: {
     position: "absolute",
@@ -239,16 +253,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     alignSelf: "center",
-  },
-
-  /* input */
-  inputContainer: {
-    width: "80%",
-  },
-  input: {
-    backgroundColor: "#fff",
-    marginVertical: 8,
-    padding: 12,
-    borderRadius: 8,
   },
 });

@@ -43,25 +43,19 @@ export async function createSection(kitchenId: string, name: string, startDate: 
   return data;
 }
 
-// Haal één specifieke sectie op (zonder taken)
-export async function fetchSectionById(sectionId: string) {
-  const { data, error } = await supabase.from("sections").select("*").eq("id", sectionId).maybeSingle();
-  if (error) throw error;
-  return data;
-}
-
-// Pas de naam aan van een sectie
-export async function updateSectionName(sectionId: string, newName: string) {
+/* Pas de naam en einddatum aan van een sectie */
+export async function updateSection(sectionId: string, newName: string, newEndDate: string) {
   const { data, error } = await supabase
     .from("sections")
-    .update({ section_name: newName })
+    .update({ section_name: newName, end_date: newEndDate })
     .eq("id", sectionId)
     .maybeSingle();
+
   if (error) throw error;
   return data;
 }
 
-// Verwijder sectie, maar check eerst of er nog taken aan hangen
+/* Verwijder sectie, maar check eerst of er nog taken aan hangen */
 export async function deleteSectionWithCheck(sectionId: string): Promise<"deleted" | "has_tasks"> {
   const { count, error: countError } = await supabase
     .from("task_templates")

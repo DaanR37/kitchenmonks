@@ -201,21 +201,22 @@ export default function TeamMepTabletView() {
       {/* --- Modal: Taakdetails --- */}
       <TaskDetailsModal
         visible={showDetailsModal}
-        onClose={closeModal}
         selectedTask={selectedTask}
         allProfiles={allProfiles}
         STATUS_META={STATUS_META}
+        cleanTaskName={cleanTaskName}
+        closeModal={closeModal}
+        generateInitials={generateInitials}
+        getColorFromId={getColorFromId}
         onAssignToggle={handleToggleAssignTask}
         onSetDone={handleSetDone}
         onSetInProgress={handleSetInProgress}
         onSetActive={handleSetActiveTask}
         onSetInactive={handleSetInactiveTask}
         onSetOutOfStock={handleSetOutOfStock}
-        onEditTask={handleEditTask}
-        cleanTaskName={cleanTaskName}
-        generateInitials={generateInitials}
-        getColorFromId={getColorFromId}
         onSetSkip={handleSetSkip}
+        handleEditTask={handleEditTask}
+        onClose={closeModal}
       />
     </View>
   );

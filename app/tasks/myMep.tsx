@@ -204,21 +204,22 @@ export default function MyMepScreen() {
 
       <TaskDetailsModal
         visible={showDetailsModal}
-        onClose={closeModal}
         selectedTask={selectedTask}
         allProfiles={allProfiles}
         STATUS_META={STATUS_META}
+        cleanTaskName={cleanTaskName}
+        closeModal={closeModal}
+        generateInitials={generateInitials}
+        getColorFromId={getColorFromId}
         onAssignToggle={handleToggleAssignTask}
         onSetDone={handleSetDone}
         onSetInProgress={handleSetInProgress}
         onSetActive={handleSetActiveTask}
         onSetInactive={handleSetInactiveTask}
         onSetOutOfStock={handleSetOutOfStock}
-        cleanTaskName={cleanTaskName}
-        generateInitials={generateInitials}
-        getColorFromId={getColorFromId}
-        onEditTask={handleEditTask}
         onSetSkip={handleSetSkip}
+        handleEditTask={handleEditTask}
+        onClose={closeModal}
       />
     </View>
   );

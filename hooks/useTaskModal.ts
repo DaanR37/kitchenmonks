@@ -5,7 +5,9 @@ import {
   updateTaskInstanceInProgress,
   updateTaskInstanceStatus,
   updateTaskInstanceSkip,
+  deleteTaskInstance,
 } from "@/services/api/taskInstances";
+import { updateTaskTemplateName } from "@/services/api/taskTemplates";
 
 export type TaskRow = {
   id: string;
@@ -36,10 +38,11 @@ export default function useTaskModal({
   setSections,
 }: {
   sections: SectionData[];
-  setSections: (sections: SectionData[]) => void;
+  setSections: (sections: SectionData[] | ((prev: SectionData[]) => SectionData[])) => void;
 }) {
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showEditTaskModal, setShowEditTaskModal] = useState(false);
 
   function openModal(task: TaskRow) {
     setSelectedTask(task);
@@ -64,10 +67,42 @@ export default function useTaskModal({
     );
   }
 
-  async function handleEditTask() {
+
+
+
+  
+
+  async function handleEditTask(newName: string) {
     if (!selectedTask) return;
-    console.log("Edit task pressed");
+  
+    try {
+      await updateTaskTemplateName(selectedTask.task_template_id, newName);
+  
+      const updatedTask = { ...selectedTask, task_name: newName };
+      setSelectedTask(updatedTask);
+  
+      /* Update secties in context */
+      setSections((prev: SectionData[]) =>
+        prev.map((sec: SectionData) =>
+          sec.id !== selectedTask.section.id
+            ? sec
+            : {
+                ...sec,
+                tasks: sec.tasks.map((task: TaskRow) =>
+                  task.id === selectedTask.id ? updatedTask : task
+                ),
+              }
+        )
+      );
+    } catch (error) {
+      console.error("Fout bij bijwerken taaknaam:", error);
+    }
   }
+
+
+
+
+
 
   async function handleToggleAssignTask(profileId: string) {
     if (!selectedTask) return;

@@ -33,6 +33,17 @@ export async function createTaskTemplate(
   return data;
 }
 
+export async function updateTaskTemplateName(taskTemplateId: string, newName: string) {
+  const { data, error } = await supabase
+    .from("task_templates")
+    .update({ task_name: newName })
+    .eq("id", taskTemplateId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 /*
   fetchTaskTemplatesBySection:
   - Doel: Haal alle taaktemplates op voor een bepaalde sectie (sectionId) die geldig zijn op de geselecteerde datum.

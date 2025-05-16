@@ -27,6 +27,8 @@ export async function createProfile(kitchen_id: string, firstName: string, lastN
   return data;
 }
 
+/* ------------------------------------------------------------ */
+
 /* Bewerk (update) een profiel */
 export async function updateProfile(profileId: string, firstName: string, lastName: string) {
   const { data, error } = await supabase

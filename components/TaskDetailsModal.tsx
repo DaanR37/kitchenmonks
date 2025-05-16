@@ -1,9 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { Modal, Pressable, View, FlatList, TouchableOpacity, StyleSheet } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AppText from "@/components/AppText";
 import { ProfileData } from "@/services/ProfileContext";
 import { StatusMeta } from "@/constants/statusMeta";
+import EditTaskModal from "@/components/EditTaskModal";
+// import { updateTaskInstanceName } from "@/services/api/taskInstances";
+import { deleteTaskInstance } from "@/services/api/taskInstances";
 
 export type TaskRow = {
   id: string;
@@ -32,6 +35,7 @@ export type SectionData = {
 interface TaskDetailsModalProps {
   visible: boolean;
   onClose: () => void;
+  closeModal: () => void;
   selectedTask: TaskRow | null;
   allProfiles: ProfileData[];
   STATUS_META: Record<string, StatusMeta>;
@@ -41,16 +45,17 @@ interface TaskDetailsModalProps {
   onSetActive: () => void;
   onSetInactive: () => void;
   onSetOutOfStock: () => void;
-  onEditTask: () => void;
   onSetSkip: () => void;
   cleanTaskName: (name: string) => string;
   generateInitials: (firstName?: string, lastName?: string) => string;
   getColorFromId: (id: string) => string;
+  handleEditTask: (newName: string) => Promise<void>;
 }
 
 export default function TaskDetailsModal({
   visible,
   onClose,
+  closeModal,
   selectedTask,
   allProfiles,
   STATUS_META,
@@ -62,10 +67,13 @@ export default function TaskDetailsModal({
   onSetOutOfStock,
   cleanTaskName,
   getColorFromId,
-  onEditTask,
   onSetSkip,
+  handleEditTask,
 }: TaskDetailsModalProps) {
   if (!selectedTask) return null;
+  const [showEditTaskModal, setShowEditTaskModal] = useState(false);
+
+  /* ------------------------------------------------------------ */
 
   const renderStatusButtons = () => {
     const rows = [
@@ -111,10 +119,7 @@ export default function TaskDetailsModal({
           return (
             <TouchableOpacity
               key={statusKey}
-              style={[
-                styles.statusOval,
-                isSelected && styles.statusOvalSelected, // ✅ nieuwe style
-              ]}
+              style={[styles.statusOval, isSelected && styles.statusOvalSelected]}
               onPress={() => handleStatusChange(statusKey)}
             >
               <View
@@ -138,7 +143,6 @@ export default function TaskDetailsModal({
       </View>
     ));
   };
-
   const renderProfileBubbles = () => {
     if (!selectedTask) return null;
     return (
@@ -155,10 +159,7 @@ export default function TaskDetailsModal({
 
           return (
             <TouchableOpacity
-              style={[
-                styles.profileBubble,
-                isAssigned && { borderWidth: 2, borderColor: bubbleColor },
-              ]}
+              style={[styles.profileBubble, isAssigned && { borderWidth: 2, borderColor: bubbleColor }]}
               onPress={() => onAssignToggle(profile.id)}
               key={profile.id}
             >
@@ -187,10 +188,35 @@ export default function TaskDetailsModal({
 
           <View style={styles.statusGridContainer}>
             <AppText style={styles.statusGridTitle}>Status</AppText>
+
+            {/* Status Buttons */}
             {renderStatusButtons()}
-            <TouchableOpacity style={styles.editButton} onPress={() => console.log("Edit task pressed")}>
+
+            {/* Edit Task Button */}
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => {
+                setShowEditTaskModal(true);
+              }}
+            >
               <AppText style={styles.editButtonText}>Edit task</AppText>
             </TouchableOpacity>
+
+            {/* Edit Task Modal */}
+            <EditTaskModal
+              visible={showEditTaskModal}
+              taskName={selectedTask.task_name}
+              onSave={async (newName) => {
+                await handleEditTask(newName);
+                setShowEditTaskModal(false);
+              }}
+              onDelete={async () => {
+                await deleteTaskInstance(selectedTask.id);
+                setShowEditTaskModal(false);
+                onClose();
+              }}
+              onClose={() => setShowEditTaskModal(false)}
+            />
           </View>
         </Pressable>
       </Pressable>
@@ -211,13 +237,11 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 0,
     backgroundColor: "#fff",
-
     // ✅ Shadow voor iOS:
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
-
     // ✅ Elevation voor Android:
     elevation: 12,
   },
@@ -244,7 +268,6 @@ const styles = StyleSheet.create({
   },
   profileBubblesContainer: {
     flexDirection: "row",
-    flexWrap: "wrap", // zodat de bubbles doorlopen op een nieuwe regel als ze niet passen
   },
   profileBubble: {
     width: 44,

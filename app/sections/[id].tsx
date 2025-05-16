@@ -8,27 +8,16 @@ import {
   FlatList,
   TextInput,
   Pressable,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
-import {
-  fetchSectionById,
-  updateSectionName,
-  deleteSectionWithCheck,
-  fetchSections,
-} from "@/services/api/sections";
+import CalendarModal from "@/components/CalendarModal";
+import { updateSection, deleteSectionWithCheck, fetchSections } from "@/services/api/sections";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
-import {
-  updateTaskInstanceInProgress,
-  updateTaskInstanceDone,
-  updateTaskInstanceStatus,
-  assignTaskInstance,
-  createTaskInstance,
-} from "@/services/api/taskInstances";
+import { createTaskInstance } from "@/services/api/taskInstances";
 import { createTaskTemplate } from "@/services/api/taskTemplates";
 import { fetchProfiles } from "@/services/api/profiles";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
@@ -38,23 +27,28 @@ import { STATUS_META } from "@/constants/statusMeta";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { formatDateString } from "@/components/DateSelector";
 
 export default function SingleSectionScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useContext(AuthContext);
   const { selectedDate } = useContext(DateContext);
-
   const [sections, setSections] = useState<SectionData[]>([]);
-  const [sectionName, setSectionName] = useState("");
-  const [editing, setEditing] = useState(false);
-  const [showOptions, setShowOptions] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
+
+  /* State voor "Add Task" modal */
   const [addTaskModalVisible, setAddTaskModalVisible] = useState(false);
   const [addTaskSectionId, setAddTaskSectionId] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState("");
-  const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
+
+  /* State voor "Edit/Delete" section modal */
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editSectionName, setEditSectionName] = useState("");
+  const [editSectionId, setEditSectionId] = useState<string | null>(null);
+  const [editSectionEndDate, setEditSectionEndDate] = useState<string>(selectedDate);
+  const [showEditEndDatePicker, setShowEditEndDatePicker] = useState(false);
 
   /* Haal eerst de profielen op zodra de user beschikbaar is */
   useEffect(() => {
@@ -196,30 +190,13 @@ export default function SingleSectionScreen() {
     }
   }
 
-  async function handleRenameSection() {
-    try {
-      await updateSectionName(id as string, sectionName);
-      setEditing(false);
-    } catch (err) {
-      Alert.alert("Fout", "Kon sectienaam niet aanpassen.");
-    }
-  }
+  /* Handle the circle press */
+  const handleCirclePress = async (task: TaskRow) => {
+    await handleSetDone();
+    openModal({ ...task, status: "done" });
+  };
 
-  async function handleDeleteSection() {
-    try {
-      const result = await deleteSectionWithCheck(id as string);
-      if (result === "has_tasks") {
-        Alert.alert(
-          "Let op",
-          "Deze sectie bevat nog taken. Verwijder eerst de taken voordat je de sectie verwijdert."
-        );
-      } else {
-        router.back();
-      }
-    } catch (err) {
-      Alert.alert("Fout", "Sectie kon niet verwijderd worden.");
-    }
-  }
+  /* ------------------------------------------------------------ */
 
   /* Handlers voor de "Nieuwe taak" modal */
   function openAddTaskModal(sectionId: string) {
@@ -233,10 +210,152 @@ export default function SingleSectionScreen() {
     setAddTaskModalVisible(false);
   }
 
-  /* Handle the circle press */
-  const handleCirclePress = async (task: TaskRow) => {
-    await handleSetDone();
-    openModal({ ...task, status: "done" });
+  /* ------------------------------------------------------------ */
+
+  /* Handle the "Edit/Delete" section modal */
+  const handleShowEditModal = (section: SectionData) => {
+    setEditSectionId(section.id);
+    setEditSectionName(section.section_name);
+    setEditSectionEndDate(section.end_date);
+    setShowEditModal(true);
+  };
+  /* Handler om changes in de modal op te slaan */
+  const handleSaveEditSection = async () => {
+    if (!editSectionId || !editSectionName.trim()) return;
+    try {
+      await updateSection(editSectionId, editSectionName.trim(), editSectionEndDate);
+
+      /* Update de lokale state */
+      const updatedSections = sections.map((s) =>
+        s.id === editSectionId
+          ? { ...s, section_name: editSectionName.trim(), end_date: editSectionEndDate }
+          : s
+      );
+      setSections(updatedSections);
+      setShowEditModal(false);
+    } catch (error) {
+      console.error("Fout bij bewerken menu-item:", error);
+      alert("Er ging iets mis bij het opslaan.");
+    }
+  };
+  /* Handler om de sectie te verwijderen */
+  const handleDeleteSection = async () => {
+    if (!editSectionId) return;
+    try {
+      const result = await deleteSectionWithCheck(editSectionId);
+      if (result === "has_tasks") {
+        alert("Deze sectie bevat nog taken en kan niet verwijderd worden.");
+        return;
+      }
+      const updated = sections.filter((s) => s.id !== editSectionId);
+      setSections(updated);
+      setShowEditModal(false);
+      setEditSectionId(null);
+      setEditSectionName("");
+    } catch (error) {
+      console.error("Fout bij verwijderen menu-item:", error);
+      alert("Verwijderen is mislukt.");
+    }
+  };
+
+  /* Add Task & Edit Section Modals */
+  const renderAddTaskModal = () => {
+    return (
+      <Modal
+        visible={addTaskModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeAddTaskModal}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <Pressable style={styles.modalOverlay} onPress={closeAddTaskModal}>
+            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+              <AppText style={styles.modalTitle}>Nieuwe taak</AppText>
+
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  value={newTaskName}
+                  onChangeText={setNewTaskName}
+                  placeholder="Naam van de taak"
+                />
+              </View>
+
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity style={styles.saveButton} onPress={handleCreateTask}>
+                  <AppText style={styles.saveButtonText}>Opslaan</AppText>
+                </TouchableOpacity>
+              </View>
+
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+    );
+  };
+  const renderEditSectionModal = () => {
+    return (
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+        >
+          <Pressable style={styles.modalOverlay} onPress={() => setShowEditModal(false)}>
+            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+              <AppText style={styles.modalTitle}>Menu-item bewerken</AppText>
+              <TextInput
+                style={styles.input}
+                value={editSectionName}
+                onChangeText={setEditSectionName}
+                placeholder="Naam menu-item"
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+
+              <AppText style={styles.label}>Einddatum</AppText>
+              <TouchableOpacity
+                style={styles.datePickerButton}
+                onPress={() => setShowEditEndDatePicker(true)}
+              >
+                <AppText style={styles.datePickerText}>{formatDateString(editSectionEndDate)}</AppText>
+              </TouchableOpacity>
+
+              {/* Save Section Button */}
+              <TouchableOpacity style={styles.saveButton} onPress={handleSaveEditSection}>
+                <AppText style={styles.saveButtonText}>Opslaan</AppText>
+              </TouchableOpacity>
+
+              {/* Delete Section Button */}
+              <TouchableOpacity
+                style={[styles.deleteButton, { marginTop: 12 }]}
+                onPress={handleDeleteSection}
+              >
+                <AppText style={styles.deleteButtonText}>Verwijderen</AppText>
+              </TouchableOpacity>
+
+              <CalendarModal
+                visible={showEditEndDatePicker}
+                selectedDate={editSectionEndDate}
+                onClose={() => setShowEditEndDatePicker(false)}
+                onSelectDate={(date) => {
+                  setEditSectionEndDate(date);
+                  setShowEditEndDatePicker(false);
+                }}
+              />
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+    );
   };
 
   if (loading) {
@@ -263,7 +382,13 @@ export default function SingleSectionScreen() {
         keyExtractor={(sec) => sec.id}
         renderItem={({ item: sec }) => (
           <View style={styles.sectionContainer}>
-            <AppText style={styles.sectionTitle}>{sec.section_name}</AppText>
+            <View style={styles.sectionRow}>
+              <AppText style={styles.sectionTitle}>{sec.section_name}</AppText>
+              {/* Kebab-menu - drie puntjes) */}
+              <TouchableOpacity style={styles.editButton} onPress={() => handleShowEditModal(sec)}>
+                <Ionicons name="ellipsis-horizontal" size={18} color="#666" />
+              </TouchableOpacity>
+            </View>
 
             {sec.tasks.map((task) => {
               const meta = STATUS_META[task.status as keyof typeof STATUS_META] || {
@@ -315,63 +440,41 @@ export default function SingleSectionScreen() {
                 </View>
               );
             })}
+
             {/* Button om een nieuwe taak toe te voegen aan de sectie */}
             <TouchableOpacity style={styles.addTaskButton} onPress={() => openAddTaskModal(sec.id)}>
-              <AppText style={styles.addTaskText}>+ Voeg taak toe</AppText>
+              <View style={styles.plusCircle}>
+                <Ionicons name="add" size={15} style={{ opacity: 0.5, color: "#333" }} />
+              </View>
+              <AppText style={styles.addTaskText}>Voeg taak toe</AppText>
             </TouchableOpacity>
           </View>
         )}
       />
 
-      {/* Modal voor het toevoegen van een nieuwe taak */}
-      <Modal
-        visible={addTaskModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeAddTaskModal}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
-        >
-          <Pressable style={styles.modalOverlay} onPress={closeAddTaskModal}>
-            {/* Stop propagatie zodat klikken binnen de modal de modal niet sluit */}
-            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-              <AppText style={styles.modalTitle}>Nieuwe taak</AppText>
-              <TextInput
-                style={styles.input}
-                value={newTaskName}
-                onChangeText={setNewTaskName}
-                placeholder="Naam van de taak"
-              />
-              <TouchableOpacity style={styles.saveButton} onPress={handleCreateTask}>
-                <AppText style={styles.saveButtonText}>Opslaan</AppText>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelButton} onPress={closeAddTaskModal}>
-                <AppText style={styles.cancelButtonText}>Annuleren</AppText>
-              </TouchableOpacity>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
+      {/* Add Task & Edit Section Modals */}
+      {renderAddTaskModal()}
+      {renderEditSectionModal()}
 
+      {/* Modal voor de taakdetails - Status & Assigned to */}
       <TaskDetailsModal
         visible={showDetailsModal}
-        onClose={closeModal}
         selectedTask={selectedTask}
         allProfiles={allProfiles}
         STATUS_META={STATUS_META}
+        cleanTaskName={cleanTaskName}
+        closeModal={closeModal}
+        generateInitials={generateInitials}
+        getColorFromId={getColorFromId}
         onAssignToggle={handleToggleAssignTask}
         onSetDone={handleSetDone}
         onSetInProgress={handleSetInProgress}
         onSetActive={handleSetActiveTask}
         onSetInactive={handleSetInactiveTask}
         onSetOutOfStock={handleSetOutOfStock}
-        cleanTaskName={cleanTaskName}
-        generateInitials={generateInitials}
-        getColorFromId={getColorFromId}
-        onEditTask={handleEditTask}
         onSetSkip={handleSetSkip}
+        handleEditTask={handleEditTask}
+        onClose={closeModal}
       />
     </View>
   );
@@ -381,7 +484,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f6f6f6",
-    paddingVertical: Platform.select({
+    paddingTop: Platform.select({
       ios: 85,
       android: 35,
     }),
@@ -413,69 +516,62 @@ const styles = StyleSheet.create({
   },
 
   /* Loading */
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  /* Section container */
   sectionContainer: {
-    backgroundColor: "#fff",
     marginHorizontal: 16,
     marginBottom: 16,
     borderRadius: 8,
     padding: 16,
+    backgroundColor: "#fff",
   },
-  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
+  sectionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 7,
+  },
+  sectionTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  editButton: {
+    alignItems: "center",
+  },
 
   /* Add task button */
-  addTaskButton: { marginTop: 16, paddingVertical: 0 },
-  addTaskText: { color: "#666" },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "transparent",
-  },
-  modalContent: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 15,
-    paddingVertical: Platform.select({
-      ios: 35,
-      android: 15,
-    }),
-    backgroundColor: "#fff",
-
-    // ✅ Shadow voor iOS:
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-
-    // ✅ Elevation voor Android:
-    elevation: 12,
-  },
-  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10, color: "#333" },
-  input: { backgroundColor: "#f2f2f2", padding: 8, borderRadius: 6, marginBottom: 12 },
-  saveButton: {
-    backgroundColor: "#6C63FF",
-    padding: 10,
-    borderRadius: 6,
+  addTaskButton: {
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginTop: 16,
   },
-  saveButtonText: { color: "#fff", fontWeight: "bold" },
-  cancelButton: { padding: 10, alignItems: "center" },
-  cancelButtonText: { color: "#333", fontWeight: "bold" },
+  plusCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.04)",
+  },
+  addTaskText: { flex: 1, fontSize: 15, color: "#666" },
 
   /* Task item row */
   taskItemRow: {
     flexDirection: "row",
     alignItems: "center",
+    marginVertical: 8,
     backgroundColor: "#fff",
-    marginBottom: 6,
-    padding: 10,
-    borderRadius: 6,
   },
   taskStatusCircleContainer: {
-    width: 1,
     alignItems: "center",
-    marginRight: 26,
+    marginRight: 12,
+    // width: 1,
   },
   taskStatusCircle: {
     width: 28,
@@ -492,6 +588,8 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "500",
   },
+
+  /* Task status */
   doneText: {
     color: "#000",
     fontWeight: "700",
@@ -516,9 +614,100 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  headerRow: {
-    flexDirection: "row",
+
+  // -- Modal styling --
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "transparent",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    padding: 16,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    paddingTop: 30,
+    // Shadow voor iOS:
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    // Elevation voor Android:
+    elevation: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+    color: "#333",
+  },
+
+  /* Input */
+  inputContainer: {
+    marginBottom: 12,
+  },
+  input: {
+    padding: Platform.select({
+      ios: 14,
+      android: 12,
+    }),
+    borderRadius: 8,
+    marginVertical: 4,
+    fontSize: 16,
+    backgroundColor: "#f2f2f2",
+  },
+  label: {
+    marginTop: 6,
+    fontSize: 15,
+    color: "#333",
+  },
+  datePickerButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    marginTop: 4,
+    backgroundColor: "#f2f2f2",
+  },
+  datePickerText: {
+    fontSize: 14,
+    color: "#333",
+  },
+
+  /* Buttons Modal - Edit/Delete */
+  buttonContainer: {
+    marginBottom: Platform.select({
+      ios: 22,
+      android: 12,
+    }),
+  },
+  saveButton: {
+    padding: 16,
+    marginBottom: Platform.select({
+      ios: 12,
+      android: 8,
+    }),
+    borderRadius: 50,
     alignItems: "center",
-    marginBottom: 20,
+    backgroundColor: "#017cff99",
+    // backgroundColor: "#000",
+  },
+  saveButtonText: {
+    color: "#000",
+    fontSize: 17,
+    // color: "#fff",
+    // fontWeight: "bold",
+  },
+  deleteButton: {
+    padding: 12,
+    borderRadius: 50,
+    marginTop: 4,
+    alignItems: "center",
+    backgroundColor: "#f61212",
+  },
+  deleteButtonText: {
+    color: "#000",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });

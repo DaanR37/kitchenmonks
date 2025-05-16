@@ -5,14 +5,12 @@ import {
   Image,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   Modal,
   TextInput,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   useWindowDimensions,
-  FlatList,
   ScrollView,
 } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
@@ -270,7 +268,7 @@ export default function HomeScreen() {
   const initials = generateInitials(activeProfile?.first_name, activeProfile?.last_name);
   const avatarColor = activeProfile ? getColorFromId(activeProfile.id) : "#6C63FF";
 
-  /* Deze modal ook reusable component maken */
+  /* Add Section Modal */
   const renderAddSectionModal = () => {
     return (
       <Modal
@@ -289,35 +287,38 @@ export default function HomeScreen() {
             <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
               <AppText style={styles.modalTitle}>Nieuw menu-item</AppText>
 
-              <TextInput
-                style={styles.input}
-                placeholder="menu-item"
-                value={newSectionName}
-                onChangeText={setNewSectionName}
-                autoCorrect={false}
-              />
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="menu-item"
+                  value={newSectionName}
+                  onChangeText={setNewSectionName}
+                  autoCorrect={false}
+                />
+              </View>
 
               {/* Kiezen van startdatum */}
-              <AppText style={styles.label}>Startdatum</AppText>
-              <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowStartDatePicker(true)}>
-                <AppText style={styles.datePickerText}>{formatDateString(newSectionStartDate)}</AppText>
-              </TouchableOpacity>
+              <View style={styles.datePickerContainer}>
+                <AppText style={styles.label}>Startdatum</AppText>
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={() => setShowStartDatePicker(true)}
+                >
+                  <AppText style={styles.datePickerText}>{formatDateString(newSectionStartDate)}</AppText>
+                </TouchableOpacity>
 
-              {/* Kiezen van einddatum */}
-              <AppText style={styles.label}>Einddatum</AppText>
-              <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowEndDatePicker(true)}>
-                <AppText style={styles.datePickerText}>{formatDateString(newSectionEndDate)}</AppText>
-              </TouchableOpacity>
+                {/* Kiezen van einddatum */}
+                <AppText style={styles.label}>Einddatum</AppText>
+                <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowEndDatePicker(true)}>
+                  <AppText style={styles.datePickerText}>{formatDateString(newSectionEndDate)}</AppText>
+                </TouchableOpacity>
+              </View>
 
-              {/* Opslaan */}
-              <TouchableOpacity style={styles.saveButton} onPress={handleCreateSection}>
-                <AppText style={styles.saveButtonText}>Opslaan</AppText>
-              </TouchableOpacity>
-
-              {/* Annuleren */}
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddModal(false)}>
-                <AppText style={styles.cancelButtonText}>Annuleren</AppText>
-              </TouchableOpacity>
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity style={styles.saveButton} onPress={handleCreateSection}>
+                  <AppText style={styles.saveButtonText}>Opslaan</AppText>
+                </TouchableOpacity>
+              </View>
 
               {/* Startdatum CalendarModal */}
               <CalendarModal
@@ -404,10 +405,7 @@ export default function HomeScreen() {
           </View>
 
           {/* ----------- Scrollbare content: stats + sections + add button ----------- */}
-          <ScrollView
-            keyboardShouldPersistTaps="always"
-            showsVerticalScrollIndicator={false}
-          >
+          <ScrollView keyboardShouldPersistTaps="always" showsVerticalScrollIndicator={false}>
             {/* Stats bovenin */}
             <StatsSection
               allPercentage={allPercentage}
@@ -462,7 +460,7 @@ export default function HomeScreen() {
             </View>
           </ScrollView>
 
-          {/* Modal */}
+          {/* Add Section Modal */}
           {renderAddSectionModal()}
         </View>
       ) : null}
@@ -543,58 +541,22 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 0,
     backgroundColor: "#fff",
-
-    // ✅ Shadow voor iOS:
+    // Shadow voor iOS:
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
-
-    // ✅ Elevation voor Android:
+    // Elevation voor Android:
     elevation: 12,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: "bold",
     marginBottom: 12,
     color: "#333",
   },
-  input: {
-    padding: 8,
-    borderRadius: 6,
-    marginBottom: 12,
-    backgroundColor: "#f2f2f2",
-  },
-  label: {
-    marginTop: 10,
-    fontSize: 14,
-    color: "#333",
-  },
-  datePickerButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginBottom: 10,
-    marginTop: 4,
-    backgroundColor: "#f2f2f2",
-  },
-  datePickerText: {
-    fontSize: 14,
-    color: "#333",
-  },
-  saveButton: {
-    alignItems: "center",
-    padding: 10,
-    marginBottom: 8,
-    borderRadius: 6,
-    backgroundColor: "#6C63FF",
-  },
-  saveButtonText: {
-    color: "#fff",
-    fontSize: 14,
-  },
-  cancelButton: { padding: 10, alignItems: "center" },
-  cancelButtonText: { color: "#666" },
 
+  // -- Add section button styling --
   addSectionButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -612,9 +574,70 @@ const styles = StyleSheet.create({
   },
   addSectionText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 16,
     color: "#666",
     opacity: 0.8,
+  },
+
+  // -- Input styling --
+  inputContainer: {
+    marginBottom: 12,
+  },
+  input: {
+    padding: Platform.select({
+      ios: 14,
+      android: 12,
+    }),
+    borderRadius: 8,
+    marginVertical: 4,
+    fontSize: 16,
+    backgroundColor: "#f2f2f2",
+  },
+  datePickerContainer: {
+    marginBottom: 12,
+  },
+  label: {
+    marginTop: 6,
+    fontSize: 15,
+    color: "#333",
+  },
+  datePickerButton: {
+    padding: Platform.select({
+      ios: 14,
+      android: 12,
+    }),
+    borderRadius: 8,
+    marginVertical: 4,
+    backgroundColor: "#f2f2f2",
+  },
+  datePickerText: {
+    fontSize: 16,
+    color: "#333",
+  },
+
+  // -- Save button styling --
+  buttonContainer: {
+    marginBottom: Platform.select({
+      ios: 22,
+      android: 12,
+    }),
+  },
+  saveButton: {
+    padding: 16,
+    marginBottom: Platform.select({
+      ios: 12,
+      android: 8,
+    }),
+    borderRadius: 50,
+    alignItems: "center",
+    backgroundColor: "#017cff99",
+    // backgroundColor: "#000",
+  },
+  saveButtonText: {
+    color: "#000",
+    fontSize: 17,
+    // color: "#fff",
+    // fontWeight: "bold",
   },
 
   // -- Linker Kolom styling (mobiel) --
@@ -727,6 +750,8 @@ const styles = StyleSheet.create({
     height: 40,
     resizeMode: "contain",
   },
+
+  // -- Tablet view --
   listContainerTablet: {
     width: "100%",
     height: "auto",
@@ -769,7 +794,7 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   sectionName: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#333",
   },
 
