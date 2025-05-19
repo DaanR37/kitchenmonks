@@ -5,7 +5,7 @@ import AppText from "@/components/AppText";
 import { ProfileData } from "@/services/ProfileContext";
 import { StatusMeta } from "@/constants/statusMeta";
 import EditTaskModal from "@/components/EditTaskModal";
-import { deleteTaskInstance } from "@/services/api/taskInstances";
+// import { deleteTaskInstance } from "@/services/api/taskInstances";
 
 export type TaskRow = {
   id: string;
@@ -71,7 +71,7 @@ export default function TaskDetailsModal({
   handleEditTask,
   handleDeleteTask,
 }: TaskDetailsModalProps) {
-  if (!selectedTask) return null;
+  if (!visible) return null; // gebruik alleen visible als voorwaarde
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
   const { width, height } = useWindowDimensions();
   const isTabletLandscape = width > 800 && width > height;
@@ -117,7 +117,7 @@ export default function TaskDetailsModal({
           const meta = STATUS_META[statusKey];
           if (!meta) return null;
 
-          const isSelected = selectedTask.status === statusMapping[statusKey];
+          const isSelected = selectedTask?.status === statusMapping[statusKey];
 
           return (
             <TouchableOpacity
@@ -147,7 +147,7 @@ export default function TaskDetailsModal({
     ));
   };
   const renderProfileBubbles = () => {
-    if (!selectedTask) return null;
+    if (!visible) return null; // gebruik alleen visible als voorwaarde
     return (
       <FlatList
         horizontal
@@ -185,7 +185,7 @@ export default function TaskDetailsModal({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.modalOverlay} onPress={onClose}>
         <Pressable style={styles.bottomModalContainer} onPress={(e) => e.stopPropagation()}>
-          <AppText style={styles.modalTaskTitle}>{cleanTaskName(selectedTask.task_name)}</AppText>
+          <AppText style={styles.modalTaskTitle}>{cleanTaskName(selectedTask?.task_name || "")}</AppText>
           <AppText style={styles.assignTitle}>Assign to:</AppText>
           {renderProfileBubbles()}
 
@@ -208,7 +208,7 @@ export default function TaskDetailsModal({
             {/* Edit Task Modal */}
             <EditTaskModal
               visible={showEditTaskModal}
-              taskName={selectedTask.task_name}
+              taskName={selectedTask?.task_name || ""}
               onSave={async (newName) => {
                 await handleEditTask(newName);
                 setShowEditTaskModal(false);

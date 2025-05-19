@@ -20,6 +20,16 @@ export async function getTasksForSectionOnDate(sectionId: string, selectedDate: 
   const templates = await fetchTaskTemplatesBySection(sectionId, selectedDate);
   const tasks: any[] = [];
 
+  // Get kitchen_id from the first template's section
+  // const { data: sectionData } = await supabase
+  //   .from("sections")
+  //   .select("kitchen_id")
+  //   .eq("id", sectionId)
+  //   .single();
+  
+  // const kitchenId = sectionData?.kitchen_id;
+  // if (!kitchenId) throw new Error("No kitchen_id found for section");
+
   /* Voor elke template, controleer of er al een task_instance bestaat voor de geselecteerde datum */
   for (const template of templates) {
     // 1. Check of de datum binnen de geldigheidsperiode valt
@@ -50,18 +60,35 @@ export async function getTasksForSectionOnDate(sectionId: string, selectedDate: 
   return tasks;
 }
 
+
+
+
+
+
+
+
 // Haal alle templates op van een keuken die geldig zijn op een bepaalde datum
 export async function fetchTaskTemplatesByKitchen(kitchenId: string, date: string) {
   const { data, error } = await supabase
     .from("task_templates")
-    .select("*, section:section_id(kitchen_id)")
+    // .select("*, section:section_id(kitchen_id)")
+    .select("*, section:section_id(id, kitchen_id)")
     .lte("start_date", date)
     .gte("end_date", date)
 
   if (error) throw error;
 
-  return data.filter((t: { section?: { kitchen_id: string } }) => t.section?.kitchen_id === kitchenId);
+  // return data.filter((t: { section?: { kitchen_id: string } }) => t.section?.kitchen_id === kitchenId);
+  return data.filter((t: any) => t.section?.kitchen_id === kitchenId);
 }
+
+
+
+
+
+
+
+
 
 export async function backfillTaskInstancesForDate(kitchenId: string, date: string) {
   const templates = await fetchTaskTemplatesByKitchen(kitchenId, date);

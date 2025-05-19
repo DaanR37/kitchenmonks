@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   assignTaskInstance,
   updateTaskInstanceDone,
@@ -43,17 +43,30 @@ export default function useTaskModal({
 }) {
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const selectedTaskRef = useRef<TaskRow | null>(null);
   // const [showEditTaskModal, setShowEditTaskModal] = useState(false);
 
   function openModal(task: TaskRow) {
-    setSelectedTask(task);
+    selectedTaskRef.current = task;
+    setSelectedTask(task); // wel voor render
     setShowDetailsModal(true);
   }
 
+  // function openModal(task: TaskRow) {
+  //   setSelectedTask(task);
+  //   setShowDetailsModal(true);
+  // }
+
   function closeModal() {
+    selectedTaskRef.current = null;
     setSelectedTask(null);
     setShowDetailsModal(false);
   }
+
+  // function closeModal() {
+  //   setSelectedTask(null);
+  //   setShowDetailsModal(false);
+  // }
 
   function refreshSingleStatus(status: string, assigned_to: string[] = selectedTask?.assigned_to ?? []) {
     if (!selectedTask) return;
@@ -122,10 +135,10 @@ export default function useTaskModal({
 
   async function handleDeleteTask() {
     if (!selectedTask) return;
-  
+
     try {
       await deleteTaskInstance(selectedTask.id);
-  
+
       // ❗ Filter de task direct uit lokale state:
       setSections((prev) =>
         prev.map((sec) =>
@@ -137,7 +150,7 @@ export default function useTaskModal({
             : sec
         )
       );
-  
+
       // ❗ Sluit de modals netjes af
       closeModal();
     } catch (error) {
@@ -209,5 +222,6 @@ export default function useTaskModal({
     handleEditTask,
     handleDeleteTask,
     handleSetSkip,
+    selectedTaskRef,
   };
 }

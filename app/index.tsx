@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import {
   View,
@@ -37,6 +37,7 @@ import OutOfStockTabletView from "@/components/OutOfStockTabletView";
 import { backfillTaskInstances, getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import NoStatusTabletView from "@/components/NoStatusTabletView";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import throttle from "lodash.throttle";
 
 type Task = {
   id: string;
@@ -89,6 +90,14 @@ export default function HomeScreen() {
     "allTasks"
   );
 
+  /* Debounced/throttled fetch functie */
+  const throttledLoadSections = useCallback(
+    throttle(() => {
+      loadSectionsWithTasksAndUpdateStats();
+    }, 500),
+    [user, activeProfile, selectedDate]
+  );
+
   /* Check of de user ingelogd is - anders redirect naar auth/login */
   useEffect(() => {
     if (!loading && !user) {
@@ -98,7 +107,7 @@ export default function HomeScreen() {
 
   /* Initial load of bij datum/profielwissel */
   useEffect(() => {
-    console.log("▶ useEffect [user, activeProfile, selectedDate] triggered");
+    // console.log("▶ useEffect [user, activeProfile, selectedDate] triggered");
     if (user && selectedDate) {
       loadSectionsWithTasksAndUpdateStats();
     }
@@ -107,23 +116,28 @@ export default function HomeScreen() {
   /* Realtime listener → alleen aanmaken bij login */
   useEffect(() => {
     if (!user) return;
-
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
 
-    console.log("▶ Supabase realtime subscriptions aangemaakt");
+    // console.log("▶ Supabase realtime subscriptions aangemaakt");
 
     /* Channel voor task_instances updates */
     const taskChannel = supabase
       .channel("taskInstancesChannel")
       .on("postgres_changes", { event: "*", schema: "public", table: "task_instances" }, (payload: any) => {
-        console.log("▶ Realtime task_instances payload ontvangen:", payload);
+        const templateId = payload.new?.task_template_id;
+        if (!templateId || payload.new?.deleted) return;
 
-        /* Voorkom loop: alleen update als payload bij geselecteerde datum hoort */
-        if (payload?.new?.date === selectedDate) {
-          console.log("▶ Herladen door task_instances wijziging");
-          loadSectionsWithTasksAndUpdateStats();
-        }
+        supabase
+          .from("task_templates")
+          .select("section_id, section:section_id(id, kitchen_id)")
+          .eq("id", templateId)
+          .maybeSingle()
+          .then(({ data, error }) => {
+            const typedData = data as { section?: { kitchen_id: string } } | null;
+            if (!typedData || typedData.section?.kitchen_id !== user.user_metadata.kitchen_id) return;
+            loadSectionsWithTasksAndUpdateStats();
+          });
       })
       .subscribe();
 
@@ -133,7 +147,10 @@ export default function HomeScreen() {
       .on("postgres_changes", { event: "*", schema: "public", table: "sections" }, (payload: any) => {
         console.log("▶ Realtime sections payload ontvangen:", payload);
 
-        loadSectionsWithTasksAndUpdateStats();
+        if (payload?.new?.kitchen_id === kitchenId) {
+          console.log("▶ Realtime sections payload ontvangen:", payload);
+          throttledLoadSections();
+        }
       })
       .subscribe();
 
@@ -152,12 +169,11 @@ export default function HomeScreen() {
     // console.log("▶ loadSectionsWithTasksAndUpdateStats START");
     setLoadingSections(true);
     try {
-      // 1️⃣ Haal secties op
-      await backfillTaskInstances(kitchenId, selectedDate);
+      // 1 Haal secties op
       const secs = await fetchSections(kitchenId, selectedDate);
       // console.log("▶ fetched sections");
 
-      // 2️⃣ Haal taken per sectie op en verrijk met section-info
+      // 2 Haal taken per sectie op en verrijk met section-info
       const mergedSections: SectionData[] = await Promise.all(
         secs.map(async (section: any) => {
           const tasks = await getTasksForSectionOnDate(section.id, selectedDate);

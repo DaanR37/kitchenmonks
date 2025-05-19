@@ -114,6 +114,7 @@ export default function SingleSectionScreen() {
     handleEditTask,
     handleDeleteTask,
     handleSetSkip,
+    selectedTaskRef
   } = useTaskModal({ sections, setSections });
 
   async function loadData(sectionId: string) {
@@ -123,11 +124,9 @@ export default function SingleSectionScreen() {
 
     setLoading(true);
     try {
-      // Haal alle secties op voor deze keuken
       await backfillTaskInstancesForDate(kitchenId, selectedDate);
-      const allSections = await fetchSections(kitchenId, selectedDate);
 
-      // Zoek de juiste sectie op basis van sectionId
+      const allSections = await fetchSections(kitchenId, selectedDate);
       const selectedSection = allSections.find((sec: any) => sec.id === sectionId);
       if (!selectedSection) {
         console.warn("Section niet gevonden met ID:", sectionId);
@@ -136,8 +135,6 @@ export default function SingleSectionScreen() {
 
       // Haal de taken op voor de geselecteerde datum
       const allTasks = await getTasksForSectionOnDate(sectionId, selectedDate);
-
-      // Voeg sectiegegevens toe aan elke taak
       const tasksWithSection = allTasks.map((t: any) => ({
         ...t,
         section: {
@@ -149,15 +146,16 @@ export default function SingleSectionScreen() {
       }));
 
       // Zet de sectie met zijn taken in de state
-      const finalSection: SectionData = {
-        id: selectedSection.id,
-        section_name: selectedSection.section_name,
-        start_date: selectedSection.start_date,
-        end_date: selectedSection.end_date,
-        tasks: tasksWithSection,
-      };
+      // const finalSection: SectionData = {
+      //   id: selectedSection.id,
+      //   section_name: selectedSection.section_name,
+      //   start_date: selectedSection.start_date,
+      //   end_date: selectedSection.end_date,
+      //   tasks: tasksWithSection,
+      // };
 
-      setSections([finalSection]); // ← belangrijk: enkele sectie in state
+      setSections([{ ...selectedSection, tasks: tasksWithSection }]);
+      // setSections([finalSection]); // ← belangrijk: enkele sectie in state
     } catch (error: any) {
       console.error("Fout bij laden van sectie:", error.message);
     } finally {
@@ -166,6 +164,10 @@ export default function SingleSectionScreen() {
   }
 
   async function handleCreateTask() {
+    if (!user) return;
+    const kitchenId = user.user_metadata?.kitchen_id;
+    if (!kitchenId) return;
+
     /* Controleer of er een sectie is geselecteerd en dat er een taaknaam is ingevoerd */
     if (!addTaskSectionId || !newTaskName.trim()) return;
     try {
@@ -195,15 +197,6 @@ export default function SingleSectionScreen() {
 
       /* Voeg de sectiegegevens toe aan de nieuwe taak, zodat we bijvoorbeeld later in de modal de parent-informatie kunnen tonen */
       newTask.section = { id: sectionObj.id, section_name: sectionObj.section_name };
-
-      // const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
-      // if (sectionObj) {
-      //   /* Voeg alle relevante sectiegegevens toe */
-      //   newTask.section = { id: sectionObj.id, section_name: sectionObj.section_name };
-      // } else {
-      //   /* Als er geen section in de lokale state gevonden wordt, log dit voor debugging */
-      //   console.log("Warning: Geen section data gevonden voor addTaskSectionId:", addTaskSectionId);
-      // }
 
       /* Update de lokale state door de nieuwe taak toe te voegen aan de taken van de juiste sectie */
       const updatedSections = sections.map((sec) => {
@@ -492,6 +485,7 @@ export default function SingleSectionScreen() {
 
       {/* Modal voor de taakdetails - Status & Assigned to */}
       <TaskDetailsModal
+        // key={selectedTask?.id ?? "static-task-modal"}
         visible={showDetailsModal}
         selectedTask={selectedTask}
         allProfiles={allProfiles}
@@ -510,6 +504,7 @@ export default function SingleSectionScreen() {
         handleEditTask={handleEditTask}
         handleDeleteTask={handleDeleteTask}
         onClose={closeModal}
+        // selectedTaskRef={selectedTaskRef}
       />
     </View>
   );
