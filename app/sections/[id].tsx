@@ -16,7 +16,7 @@ import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
 import CalendarModal from "@/components/CalendarModal";
 import { updateSection, deleteSectionWithCheck, fetchSections } from "@/services/api/sections";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
+import { backfillTaskInstancesForDate, getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { createTaskInstance } from "@/services/api/taskInstances";
 import { createTaskTemplate } from "@/services/api/taskTemplates";
 import { fetchProfiles } from "@/services/api/profiles";
@@ -124,6 +124,7 @@ export default function SingleSectionScreen() {
     setLoading(true);
     try {
       // Haal alle secties op voor deze keuken
+      await backfillTaskInstancesForDate(kitchenId, selectedDate);
       const allSections = await fetchSections(kitchenId, selectedDate);
 
       // Zoek de juiste sectie op basis van sectionId

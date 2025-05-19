@@ -25,7 +25,6 @@ export async function createTaskInstance(taskTemplateId: string, date: string) {
   return data;
 }
 
-
 /*
   updateTaskInstanceStatus:
   - Doel: Werk de status van een bestaande taakinstance bij.

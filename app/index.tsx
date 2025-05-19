@@ -34,7 +34,7 @@ import AllTasksTabletView from "@/components/AllTasksTabletView";
 import TeamMepTabletView from "@/components/TeamMepTabletView";
 import MyMepTabletView from "@/components/MyMepTabletView";
 import OutOfStockTabletView from "@/components/OutOfStockTabletView";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
+import { backfillTaskInstances, getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import NoStatusTabletView from "@/components/NoStatusTabletView";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
@@ -153,6 +153,7 @@ export default function HomeScreen() {
     setLoadingSections(true);
     try {
       // 1️⃣ Haal secties op
+      await backfillTaskInstances(kitchenId, selectedDate);
       const secs = await fetchSections(kitchenId, selectedDate);
       // console.log("▶ fetched sections");
 
@@ -495,7 +496,9 @@ export default function HomeScreen() {
               )}
 
               {/* Titel altijd zichtbaar links in de rij */}
-              <AppText style={[isSidebarCollapsed ? styles.headerTextTablet : styles.headerText]}>{activeTabTitle}</AppText>
+              <AppText style={[isSidebarCollapsed ? styles.headerTextTablet : styles.headerText]}>
+                {activeTabTitle}
+              </AppText>
             </View>
 
             {/* Avatar ALTIJD rechtsboven in tablet-view */}
@@ -570,7 +573,7 @@ const styles = StyleSheet.create({
   },
   headerTablet: {
     paddingHorizontal: 5,
-    marginVertical: 0
+    marginVertical: 0,
   },
 
   // -- Logo styling --
@@ -711,7 +714,7 @@ const styles = StyleSheet.create({
   countTablet: {
     fontSize: 17,
   },
-  
+
   // -- Section name styling --
   sectionName: {
     fontSize: 16,
@@ -745,7 +748,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 24,
   },
-  
+
   avatarCircleTablet: {
     width: 44,
     height: 44,
