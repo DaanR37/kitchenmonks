@@ -56,6 +56,7 @@ export default function TeamMepTabletView() {
     handleSetOutOfStock,
     handleEditTask,
     handleSetSkip,
+    handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
   /*
@@ -216,6 +217,7 @@ export default function TeamMepTabletView() {
         onSetOutOfStock={handleSetOutOfStock}
         onSetSkip={handleSetSkip}
         handleEditTask={handleEditTask}
+        handleDeleteTask={handleDeleteTask}
         onClose={closeModal}
       />
     </View>

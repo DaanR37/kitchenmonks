@@ -106,25 +106,41 @@ export default function HomeScreen() {
 
   /* Realtime listener → alleen aanmaken bij login */
   useEffect(() => {
-    console.log("▶ Supabase subscription created");
     if (!user) return;
 
-    const channel = supabase
+    const kitchenId = user.user_metadata?.kitchen_id;
+    if (!kitchenId) return;
+
+    console.log("▶ Supabase realtime subscriptions aangemaakt");
+
+    /* Channel voor task_instances updates */
+    const taskChannel = supabase
       .channel("taskInstancesChannel")
       .on("postgres_changes", { event: "*", schema: "public", table: "task_instances" }, (payload: any) => {
-        console.log("▶ Supabase realtime payload", payload);
+        console.log("▶ Realtime task_instances payload ontvangen:", payload);
 
         /* Voorkom loop: alleen update als payload bij geselecteerde datum hoort */
         if (payload?.new?.date === selectedDate) {
-          console.log("▶ Supabase triggers update");
+          console.log("▶ Herladen door task_instances wijziging");
           loadSectionsWithTasksAndUpdateStats();
         }
       })
       .subscribe();
 
+    /* Channel voor sections updates */
+    const sectionChannel = supabase
+      .channel("sectionsChannel")
+      .on("postgres_changes", { event: "*", schema: "public", table: "sections" }, (payload: any) => {
+        console.log("▶ Realtime sections payload ontvangen:", payload);
+
+        loadSectionsWithTasksAndUpdateStats();
+      })
+      .subscribe();
+
     return () => {
       console.log("▶ Supabase channel unsubscribed");
-      channel.unsubscribe();
+      taskChannel.unsubscribe();
+      sectionChannel.unsubscribe();
     };
   }, [user, selectedDate]);
 
@@ -371,7 +387,7 @@ export default function HomeScreen() {
     <View style={[styles.container, isTabletLandscape && styles.containerTablet]}>
       {/* ----------- Linker Kolom (alleen zichtbaar als niet collapsed) ----------- */}
       {!isTabletLandscape || !isSidebarCollapsed ? (
-        <View style={styles.leftColumn}>
+        <View style={[styles.leftColumn, isTabletLandscape && styles.leftColumnTablet]}>
           {/* Header */}
           <View style={[styles.header, isTabletLandscape && styles.headerTablet]}>
             <Image
@@ -386,7 +402,7 @@ export default function HomeScreen() {
                 onPress={() => setSidebarCollapsed((prev) => !prev)}
                 style={styles.menuToggle}
               >
-                <Ionicons name="menu" size={24} color="#333" />
+                <Ionicons name="menu" size={28} color="#333" />
               </TouchableOpacity>
             )}
 
@@ -479,7 +495,7 @@ export default function HomeScreen() {
               )}
 
               {/* Titel altijd zichtbaar links in de rij */}
-              <AppText style={styles.headerText}>{activeTabTitle}</AppText>
+              <AppText style={[isSidebarCollapsed ? styles.headerTextTablet : styles.headerText]}>{activeTabTitle}</AppText>
             </View>
 
             {/* Avatar ALTIJD rechtsboven in tablet-view */}
@@ -507,10 +523,11 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  // -- Container styling --
   container: {
     flex: 1,
     backgroundColor: "#f6f6f6",
-    paddingHorizontal: 22,
+    paddingHorizontal: 20,
     paddingTop: Platform.select({
       ios: 60,
       android: 25,
@@ -518,14 +535,233 @@ const styles = StyleSheet.create({
   },
   containerTablet: {
     flexDirection: "row",
-    paddingHorizontal: 40,
-    paddingTop: 35,
     backgroundColor: "#f6f6f6",
+    paddingHorizontal: 0,
+    paddingTop: 65,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+
+  // -- Left Column styling --
+  leftColumn: {
+    flex: 1,
+  },
+  leftColumnTablet: {
+    flex: 0.5,
+    paddingHorizontal: 25,
+  },
+
+  // -- Header styling --
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Platform.select({
+      ios: 10,
+      android: 5,
+    }),
+    marginVertical: Platform.select({
+      ios: 10,
+      android: 15,
+    }),
+  },
+  headerTablet: {
+    paddingHorizontal: 5,
+    marginVertical: 0
+  },
+
+  // -- Logo styling --
+  logo: {
+    width: 32,
+    height: 32,
+    resizeMode: "contain",
+  },
+  logoTablet: {
+    width: 44,
+    height: 44,
+  },
+
+  // -- Menu toggle styling --
+  menuToggle: {
+    marginRight: 10,
+  },
+  // -- Avatar styling --
+  avatarCircle: {
+    width: Platform.select({
+      ios: 36,
+      android: 32,
+    }),
+    height: Platform.select({
+      ios: 36,
+      android: 32,
+    }),
+    borderRadius: Platform.select({
+      ios: 18,
+      android: 16,
+    }),
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    resizeMode: "contain",
+  },
+
+  // -- List container styling --
+  listContainer: {
+    paddingVertical: 10,
+    paddingHorizontal: 5,
+    borderRadius: 18,
+    borderWidth: 0.5,
+    height: "auto",
+    borderColor: "rgba(0, 0, 0, 0.1)",
+    backgroundColor: "#ffffff",
+  },
+  listContainerTablet: {
+    width: "100%",
+    height: "auto",
+    paddingTop: 12.5,
+  },
+
+  // -- Add section button styling --
+  addSectionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    marginVertical: 6,
+  },
+  addSectionButtonTablet: {
+    marginVertical: 12,
+  },
+
+  // -- Plus circle styling --
+  plusCircle: {
+    width: 28,
+    height: 28,
+    marginRight: 12,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.04)",
+  },
+  plusCircleTablet: {
+    marginRight: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+
+  // -- Add section text styling --
+  addSectionText: {
+    flex: 1,
+    fontSize: 16,
+    color: "#666",
+    opacity: 0.8,
+  },
+  addSectionTextTablet: {
+    fontSize: 18,
+    opacity: 0.8,
+    color: "#666",
+  },
+
+  // -- Section item styling --
+  sectionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    marginVertical: 6,
+    borderRadius: 8,
+  },
+  sectionItemTablet: {
+    marginVertical: 12,
+  },
+
+  // -- Count circle styling --
+  countCircle: {
+    width: 28,
+    height: 28,
+    marginRight: 12,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+  },
+  countCircleTablet: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+  },
+
+  // -- Count styling --
+  count: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+  },
+  countTablet: {
+    fontSize: 17,
+  },
+  
+  // -- Section name styling --
+  sectionName: {
+    fontSize: 16,
+    color: "#333",
+  },
+  sectionNameTablet: {
+    fontSize: 18,
+  },
+
+  // -- Header text styling --
+  headerText: {
+    fontSize: 25,
+    fontWeight: "bold",
+  },
+  headerTextTablet: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginLeft: 24,
+  },
+
+  // -- Tablet view --
+  rightColumn: {
+    flex: 1,
+    paddingLeft: 0,
+    paddingRight: 30,
+    backgroundColor: "#f6f6f6",
+  },
+  rightColumnHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+  },
+  
+  avatarCircleTablet: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarTextTablet: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  avatarTablet: {
+    width: 40,
+    height: 40,
+    resizeMode: "contain",
   },
 
   // -- Modal styling  -> Modal moet ook in een reusable component & styling moet gescheiden zijn van beide views --
@@ -556,30 +792,7 @@ const styles = StyleSheet.create({
     color: "#333",
   },
 
-  // -- Add section button styling --
-  addSectionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    marginVertical: 6,
-  },
-  plusCircle: {
-    width: 28,
-    height: 28,
-    marginRight: 12,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.04)",
-  },
-  addSectionText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#666",
-    opacity: 0.8,
-  },
-
-  // -- Input styling --
+  // -- Modal - Input styling --
   inputContainer: {
     marginBottom: 12,
   },
@@ -615,7 +828,7 @@ const styles = StyleSheet.create({
     color: "#333",
   },
 
-  // -- Save button styling --
+  // -- Modal - Save button styling --
   buttonContainer: {
     marginBottom: Platform.select({
       ios: 22,
@@ -638,180 +851,5 @@ const styles = StyleSheet.create({
     fontSize: 17,
     // color: "#fff",
     // fontWeight: "bold",
-  },
-
-  // -- Linker Kolom styling (mobiel) --
-  leftColumn: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Platform.select({
-      ios: 10,
-      android: 5,
-    }),
-    paddingVertical: Platform.select({
-      ios: 10,
-    }),
-    marginTop: Platform.select({
-      ios: 10,
-    }),
-    marginBottom: Platform.select({
-      ios: 10,
-      android: 15,
-    }),
-  },
-  headerTablet: {
-    // marginVertical: 24,
-  },
-
-  logo: {
-    width: 32,
-    height: 32,
-    resizeMode: "contain",
-  },
-  avatarCircle: {
-    width: Platform.select({
-      ios: 36,
-      android: 32,
-    }),
-    height: Platform.select({
-      ios: 36,
-      android: 32,
-    }),
-    borderRadius: Platform.select({
-      ios: 18,
-      android: 16,
-    }),
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    resizeMode: "contain",
-  },
-  menuToggle: {
-    padding: 10,
-  },
-  listContainer: {
-    paddingVertical: 10,
-    paddingHorizontal: 5,
-    borderRadius: 18,
-    borderWidth: 0.5,
-    height: "auto",
-    borderColor: "rgba(0, 0, 0, 0.1)",
-    backgroundColor: "#ffffff",
-  },
-
-  // -- Rechter Kolom styling --
-  rightColumn: {
-    flex: 1,
-    backgroundColor: "#f6f6f6",
-  },
-  rightColumnHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    // marginVertical: 24,
-  },
-
-  headerText: {
-    fontSize: 23,
-    fontWeight: "bold",
-    marginLeft: 24,
-  },
-  logoTablet: {
-    width: 40,
-    height: 40,
-  },
-  avatarCircleTablet: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarTextTablet: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  avatarTablet: {
-    width: 40,
-    height: 40,
-    resizeMode: "contain",
-  },
-
-  // -- Tablet view --
-  listContainerTablet: {
-    width: "100%",
-    height: "auto",
-    paddingTop: 12.5,
-  },
-  addSectionButtonTablet: {
-    marginVertical: 12,
-  },
-  plusCircleTablet: {
-    // marginRight: 12.5,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-  },
-  addSectionTextTablet: {
-    fontSize: 18,
-    color: "#666",
-    opacity: 0.8,
-  },
-
-  sectionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    marginVertical: 6,
-    borderRadius: 8,
-  },
-  countCircle: {
-    width: 28,
-    height: 28,
-    marginRight: 12,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
-  },
-  count: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#333",
-  },
-  sectionName: {
-    fontSize: 16,
-    color: "#333",
-  },
-
-  // -- Tablet view --
-  sectionItemTablet: {
-    // paddingHorizontal: 16,
-    marginVertical: 12,
-  },
-  countCircleTablet: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-  },
-  countTablet: {
-    fontSize: 18,
-  },
-  sectionNameTablet: {
-    fontSize: 18,
   },
 });

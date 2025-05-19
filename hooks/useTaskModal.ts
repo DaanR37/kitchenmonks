@@ -17,6 +17,7 @@ export type TaskRow = {
   assigned_to?: string[];
   task_template_id: string;
   section_id: string;
+  deleted?: boolean;
   section: {
     id: string;
     section_name: string;
@@ -42,7 +43,7 @@ export default function useTaskModal({
 }) {
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showEditTaskModal, setShowEditTaskModal] = useState(false);
+  // const [showEditTaskModal, setShowEditTaskModal] = useState(false);
 
   function openModal(task: TaskRow) {
     setSelectedTask(task);
@@ -67,20 +68,15 @@ export default function useTaskModal({
     );
   }
 
-
-
-
-  
-
   async function handleEditTask(newName: string) {
     if (!selectedTask) return;
-  
+
     try {
       await updateTaskTemplateName(selectedTask.task_template_id, newName);
-  
+
       const updatedTask = { ...selectedTask, task_name: newName };
       setSelectedTask(updatedTask);
-  
+
       /* Update secties in context */
       setSections((prev: SectionData[]) =>
         prev.map((sec: SectionData) =>
@@ -88,9 +84,7 @@ export default function useTaskModal({
             ? sec
             : {
                 ...sec,
-                tasks: sec.tasks.map((task: TaskRow) =>
-                  task.id === selectedTask.id ? updatedTask : task
-                ),
+                tasks: sec.tasks.map((task: TaskRow) => (task.id === selectedTask.id ? updatedTask : task)),
               }
         )
       );
@@ -99,10 +93,57 @@ export default function useTaskModal({
     }
   }
 
+  // async function handleDeleteTask() {
+  //   if (!selectedTask) return;
 
+  //   try {
+  //     // 1. Verwijder uit DB
+  //     await deleteTaskInstance(selectedTask.id);
 
+  //     // 2. Update lokale state
+  //     setSections((prev) =>
+  //       prev.map((sec) =>
+  //         sec.id !== selectedTask.section.id
+  //           ? sec
+  //           : {
+  //               ...sec,
+  //               tasks: sec.tasks.filter((t) => t.id !== selectedTask.id),
+  //             }
+  //       )
+  //     );
 
+  //     // 3. Sluit modals en clear task
+  //     setSelectedTask(null);
+  //     setShowDetailsModal(false);
+  //   } catch (err) {
+  //     console.error("Fout bij verwijderen taak:", err);
+  //   }
+  // }
 
+  async function handleDeleteTask() {
+    if (!selectedTask) return;
+  
+    try {
+      await deleteTaskInstance(selectedTask.id);
+  
+      // ❗ Filter de task direct uit lokale state:
+      setSections((prev) =>
+        prev.map((sec) =>
+          sec.id === selectedTask.section.id
+            ? {
+                ...sec,
+                tasks: sec.tasks.filter((task) => task.id !== selectedTask.id),
+              }
+            : sec
+        )
+      );
+  
+      // ❗ Sluit de modals netjes af
+      closeModal();
+    } catch (error) {
+      console.error("Fout bij verwijderen taak:", error);
+    }
+  }
 
   async function handleToggleAssignTask(profileId: string) {
     if (!selectedTask) return;
@@ -166,6 +207,7 @@ export default function useTaskModal({
     handleSetInactiveTask,
     handleSetOutOfStock,
     handleEditTask,
+    handleDeleteTask,
     handleSetSkip,
   };
 }

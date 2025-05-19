@@ -57,6 +57,7 @@ export default function MyMepTabletView() {
     handleSetOutOfStock,
     handleEditTask,
     handleSetSkip,
+    handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
   /* loadData:
@@ -211,6 +212,7 @@ export default function MyMepTabletView() {
         onSetOutOfStock={handleSetOutOfStock}
         onSetSkip={handleSetSkip}
         handleEditTask={handleEditTask}
+        handleDeleteTask={handleDeleteTask}
         onClose={closeModal}
       />
     </View>

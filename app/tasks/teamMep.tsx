@@ -9,7 +9,6 @@ import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
 import useTaskModal, { TaskRow, SectionData } from "@/hooks/useTaskModal";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
-
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
 import AppText from "@/components/AppText";
@@ -58,6 +57,7 @@ export default function TeamMepScreen() {
     handleSetOutOfStock,
     handleEditTask,
     handleSetSkip,
+    handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
   /*
@@ -225,6 +225,7 @@ export default function TeamMepScreen() {
         onSetOutOfStock={handleSetOutOfStock}
         onSetSkip={handleSetSkip}
         handleEditTask={handleEditTask}
+        handleDeleteTask={handleDeleteTask}
         onClose={closeModal}
       />
     </View>

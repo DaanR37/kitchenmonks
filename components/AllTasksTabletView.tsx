@@ -63,6 +63,7 @@ export default function AllTasksTabletView() {
     handleSetOutOfStock,
     handleEditTask,
     handleSetSkip,
+    handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
   /* 2) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
@@ -204,6 +205,7 @@ export default function AllTasksTabletView() {
         onSetOutOfStock={handleSetOutOfStock}
         onSetSkip={handleSetSkip}
         handleEditTask={handleEditTask}
+        handleDeleteTask={handleDeleteTask}
         onClose={closeModal}
       />
     </View>

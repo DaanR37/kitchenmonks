@@ -58,6 +58,7 @@ export default function NoStatusScreen() {
     handleSetOutOfStock,
     handleSetSkip,
     handleEditTask,
+    handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
   useEffect(() => {
@@ -244,6 +245,7 @@ export default function NoStatusScreen() {
         onSetOutOfStock={handleSetOutOfStock}
         onSetSkip={handleSetSkip}
         handleEditTask={handleEditTask}
+        handleDeleteTask={handleDeleteTask}
         onClose={closeModal}
       />
     </View>

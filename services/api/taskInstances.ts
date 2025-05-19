@@ -15,6 +15,7 @@ export async function createTaskInstance(taskTemplateId: string, date: string) {
       {
         task_template_id: taskTemplateId /* Koppeling met de taaktemplate */,
         date: date /* De specifieke datum voor deze instance */,
+        deleted: false,
       },
     ])
     .select() /* Retourneer de ingevoegde rij (nieuwe taakinstance) */
@@ -24,29 +25,6 @@ export async function createTaskInstance(taskTemplateId: string, date: string) {
   return data;
 }
 
-/*
-  fetchTaskInstancesBySection:
-  - Doel: Haal alle taakinstances op voor een bepaalde sectie (sectionId) en datum.
-  - Werking:
-      * We doen een nested select waarbij we via de foreign key (task_template_id) de gekoppelde task_template ophalen.
-      * De notatie "task_template: task_template_id!task_instances_task_template_id_fkey(*)" 
-        betekent dat we de kolom task_template_id gebruiken en de constraint-naam "task_instances_task_template_id_fkey"
-        laten gebruiken om de relatie te vinden.
-  - Belangrijk: Zorg dat de constraintnaam exact overeenkomt met de naam in Supabase.
-*/
-export async function fetchTaskInstancesBySection(sectionId: string, date: string) {
-  /* Deze functie haalt alle task_instances op voor een bepaalde sectie en dag. 
-  We joinen via task_template om te filteren op section_id. */
-  const { data, error } = await supabase
-    .from("task_instances")
-    .select("*, task_template: task_template_id!task_instances_task_template_id_fkey(*)")
-    .eq("date", date)
-    /* Filter op de gekoppelde task_template die behoort tot de gewenste sectie */
-    .eq("task_template.section_id", sectionId);
-
-  if (error) throw error;
-  return data;
-}
 
 /*
   updateTaskInstanceStatus:
@@ -69,8 +47,9 @@ export async function updateTaskInstanceStatus(taskInstanceId: string, newStatus
 export async function deleteTaskInstance(taskInstanceId: string) {
   const { error } = await supabase
     .from("task_instances")
-    .delete()
+    .update({ deleted: true })
     .eq("id", taskInstanceId);
+
   if (error) throw error;
 }
 

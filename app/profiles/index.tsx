@@ -16,7 +16,7 @@ import { createProfile, fetchProfiles, updateProfile, deleteProfile } from "@/se
 import { ProfileContext, ProfileData } from "@/services/ProfileContext";
 import { supabase } from "@/services/supabaseClient";
 import AppText from "@/components/AppText";
-import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
+// import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useWindowDimensions } from "react-native";
 
@@ -241,9 +241,9 @@ export default function ChooseProfileScreen() {
                 />
               </View>
               {/* <View style={styles.buttonContainer}> */}
-                <TouchableOpacity style={styles.saveButton} onPress={handleCreateProfile}>
-                  <AppText style={styles.saveButtonText}>Opslaan</AppText>
-                </TouchableOpacity>
+              <TouchableOpacity style={styles.saveButton} onPress={handleCreateProfile}>
+                <AppText style={styles.saveButtonText}>Opslaan</AppText>
+              </TouchableOpacity>
               {/* </View> */}
             </Pressable>
           </Pressable>
@@ -543,8 +543,6 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: "#000",
     fontSize: 17,
-    // color: "#fff",
-    // fontWeight: "bold",
   },
   deleteButton: {
     padding: 16,
@@ -558,6 +556,5 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: "#000",
     fontSize: 17,
-    // fontWeight: "bold",
   },
 });

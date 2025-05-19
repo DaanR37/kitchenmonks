@@ -28,19 +28,20 @@ export async function getTasksForSectionOnDate(sectionId: string, selectedDate: 
       .select("*")
       .eq("task_template_id", template.id)
       .eq("date", selectedDate)
+      .eq("deleted", false)
       .limit(1)
       .maybeSingle();
-    if (error) throw error;
-    console.log("data", data);
 
-    if (data) {
-      /* Als er al een instance bestaat, voeg deze toe, en overschrijf eventueel de task_name uit de template */
+    if (error) throw error;
+
+    if (data && !data.deleted) {
       tasks.push({ ...data, task_name: template.task_name });
-    } else {
-      /* Als er geen instance bestaat, kun je er eentje aanmaken (of default gebruiken) */
-      const newInstance = await createTaskInstance(template.id, selectedDate);
-      tasks.push({ ...newInstance, task_name: template.task_name });
-    }
+    } 
+    // else {
+    //   /* Als er geen instance bestaat, kun je er eentje aanmaken (of default gebruiken) */
+    //   const newInstance = await createTaskInstance(template.id, selectedDate);
+    //   tasks.push({ ...newInstance, task_name: template.task_name });
+    // }
   }
   return tasks;
 }

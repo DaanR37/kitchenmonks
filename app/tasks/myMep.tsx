@@ -57,6 +57,7 @@ export default function MyMepScreen() {
     handleSetInactiveTask,
     handleSetOutOfStock,
     handleEditTask,
+    handleDeleteTask,
     handleSetSkip,
   } = useTaskModal({ sections, setSections });
 
@@ -219,6 +220,7 @@ export default function MyMepScreen() {
         onSetOutOfStock={handleSetOutOfStock}
         onSetSkip={handleSetSkip}
         handleEditTask={handleEditTask}
+        handleDeleteTask={handleDeleteTask}
         onClose={closeModal}
       />
     </View>

@@ -6,14 +6,13 @@ import {
   FlatList,
   Pressable,
   Platform,
-  Modal,
-  KeyboardAvoidingView,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
-import { deleteSectionWithCheck, fetchSections, updateSection } from "@/services/api/sections";
+import { fetchSections } from "@/services/api/sections";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
 import useTaskModal, { TaskRow, SectionData } from "@/hooks/useTaskModal";
@@ -31,6 +30,8 @@ export default function AllTasksScreen() {
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
+  const { width, height } = useWindowDimensions();
+  const isTabletLandscape = width > 800 && width > height;
 
   /* Haal eerst de profielen op zodra de user beschikbaar is */
   useEffect(() => {
@@ -68,6 +69,7 @@ export default function AllTasksScreen() {
     handleSetInactiveTask,
     handleSetOutOfStock,
     handleEditTask,
+    handleDeleteTask,
     handleSetSkip,
   } = useTaskModal({ sections, setSections });
 
@@ -218,6 +220,7 @@ export default function AllTasksScreen() {
         onSetOutOfStock={handleSetOutOfStock}
         onSetSkip={handleSetSkip}
         handleEditTask={handleEditTask}
+        handleDeleteTask={handleDeleteTask}
         onClose={closeModal}
       />
     </View>

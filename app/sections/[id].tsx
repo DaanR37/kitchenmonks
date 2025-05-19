@@ -28,6 +28,7 @@ import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUti
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { formatDateString } from "@/components/DateSelector";
+import { supabase } from "@/services/supabaseClient";
 
 export default function SingleSectionScreen() {
   const router = useRouter();
@@ -72,6 +73,33 @@ export default function SingleSectionScreen() {
     }
   }, [id]);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel("sectionRealtime")
+      .on(
+        "postgres_changes" as any,
+        {
+          event: "*",
+          schema: "public",
+          table: "task_instances",
+        },
+        (payload: { new: TaskRow | null; old: TaskRow | null }) => {
+          // Extra check: filter alleen taken van deze sectie én datum
+          if (
+            (payload?.new?.date === selectedDate || payload?.old?.date === selectedDate) &&
+            (payload?.new?.deleted === false || payload?.old?.deleted === false)
+          ) {
+            loadData(id);
+          }
+        }
+      )
+      .subscribe();
+  
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [selectedDate, id]);
+
   const {
     selectedTask,
     showDetailsModal,
@@ -84,6 +112,7 @@ export default function SingleSectionScreen() {
     handleSetInactiveTask,
     handleSetOutOfStock,
     handleEditTask,
+    handleDeleteTask,
     handleSetSkip,
   } = useTaskModal({ sections, setSections });
 
@@ -289,7 +318,6 @@ export default function SingleSectionScreen() {
                   <AppText style={styles.saveButtonText}>Opslaan</AppText>
                 </TouchableOpacity>
               </View>
-
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
@@ -312,35 +340,40 @@ export default function SingleSectionScreen() {
           <Pressable style={styles.modalOverlay} onPress={() => setShowEditModal(false)}>
             <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
               <AppText style={styles.modalTitle}>Menu-item bewerken</AppText>
-              <TextInput
-                style={styles.input}
-                value={editSectionName}
-                onChangeText={setEditSectionName}
-                placeholder="Naam menu-item"
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
 
-              <AppText style={styles.label}>Einddatum</AppText>
-              <TouchableOpacity
-                style={styles.datePickerButton}
-                onPress={() => setShowEditEndDatePicker(true)}
-              >
-                <AppText style={styles.datePickerText}>{formatDateString(editSectionEndDate)}</AppText>
-              </TouchableOpacity>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  value={editSectionName}
+                  onChangeText={setEditSectionName}
+                  placeholder="Naam menu-item"
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+              </View>
+
+              {/* Kiezen van einddatum */}
+              <View style={styles.datePickerContainer}>
+                <AppText style={styles.label}>Einddatum</AppText>
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={() => setShowEditEndDatePicker(true)}
+                >
+                  <AppText style={styles.datePickerText}>{formatDateString(editSectionEndDate)}</AppText>
+                </TouchableOpacity>
+              </View>
 
               {/* Save Section Button */}
-              <TouchableOpacity style={styles.saveButton} onPress={handleSaveEditSection}>
-                <AppText style={styles.saveButtonText}>Opslaan</AppText>
-              </TouchableOpacity>
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity style={styles.saveButton} onPress={handleSaveEditSection}>
+                  <AppText style={styles.saveButtonText}>Opslaan</AppText>
+                </TouchableOpacity>
 
-              {/* Delete Section Button */}
-              <TouchableOpacity
-                style={[styles.deleteButton, { marginTop: 12 }]}
-                onPress={handleDeleteSection}
-              >
-                <AppText style={styles.deleteButtonText}>Verwijderen</AppText>
-              </TouchableOpacity>
+                {/* Delete Section Button */}
+                <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteSection}>
+                  <AppText style={styles.deleteButtonText}>Verwijderen</AppText>
+                </TouchableOpacity>
+              </View>
 
               <CalendarModal
                 visible={showEditEndDatePicker}
@@ -474,6 +507,7 @@ export default function SingleSectionScreen() {
         onSetOutOfStock={handleSetOutOfStock}
         onSetSkip={handleSetSkip}
         handleEditTask={handleEditTask}
+        handleDeleteTask={handleDeleteTask}
         onClose={closeModal}
       />
     </View>
@@ -644,7 +678,7 @@ const styles = StyleSheet.create({
 
   /* Input */
   inputContainer: {
-    marginBottom: 12,
+    marginBottom: 20,
   },
   input: {
     padding: Platform.select({
@@ -654,7 +688,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginVertical: 4,
     fontSize: 16,
-    backgroundColor: "#f2f2f2",
+    backgroundColor: "#f2f1f6b3",
+  },
+  datePickerContainer: {
+    marginBottom: 12,
   },
   label: {
     marginTop: 6,
@@ -662,15 +699,16 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   datePickerButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    padding: Platform.select({
+      ios: 14,
+      android: 12,
+    }),
     borderRadius: 8,
-    marginBottom: 10,
-    marginTop: 4,
-    backgroundColor: "#f2f2f2",
+    marginVertical: 4,
+    backgroundColor: "#f2f1f6b3",
   },
   datePickerText: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#333",
   },
 
@@ -699,15 +737,16 @@ const styles = StyleSheet.create({
     // fontWeight: "bold",
   },
   deleteButton: {
-    padding: 12,
+    padding: 16,
+    marginTop: 0,
     borderRadius: 50,
-    marginTop: 4,
     alignItems: "center",
-    backgroundColor: "#f61212",
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#f61212",
   },
   deleteButtonText: {
     color: "#000",
-    fontWeight: "bold",
-    fontSize: 16,
+    fontSize: 17,
   },
 });

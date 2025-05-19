@@ -14,6 +14,7 @@ export async function fetchAllDonePercentage(date: string, kitchenId: string): P
       `
       )
       .eq("date", date)
+      .eq("deleted", false)
       .in("status", ["done", "in progress", "active"]);
 
     if (error) throw error;
@@ -43,12 +44,14 @@ export async function fetchMyTasksCount(profileId: string, date: string, kitchen
         id,
         status,
         assigned_to,
+        deleted,
         task_template:task_template_id!inner(
           section_id
         )
       `
       )
       .eq("date", date)
+      .eq("deleted", false)
       .contains("assigned_to", [profileId])
       .in("status", ["active", "in progress"]);
 
@@ -71,12 +74,14 @@ export async function fetchActiveTasksCount(date: string, kitchenId: string): Pr
         `
         id,
         status,
+        deleted,
         task_template:task_template_id!inner(
           section_id
         )
       `
       )
       .eq("date", date)
+      .eq("deleted", false)
       .in("status", ["active", "in progress"]);
 
     if (error) throw error;
@@ -97,11 +102,13 @@ export async function fetchOutOfStockTasksCount(date: string, kitchenId: string)
       .select(`
         id,
         status,
+        deleted,
         task_template:task_template_id!inner(
           section_id
         )
       `)
       .eq("date", date)
+      .eq("deleted", false)
       .eq("status", "out of stock");
 
     if (error) throw error;
@@ -122,11 +129,13 @@ export async function fetchNoStatusTasksCount(date: string, kitchenId: string): 
       .select(`
         id,
         status,
+        deleted,
         task_template:task_template_id!inner(
           section_id
         )
       `)
       .eq("date", date)
+      .eq("deleted", false)
       .eq("status", "inactive");
 
     if (error) throw error;
@@ -140,7 +149,6 @@ export async function fetchNoStatusTasksCount(date: string, kitchenId: string): 
   }
 }
 
-
 export async function fetchActiveCountPerSection(
   kitchenId: string,
   date: string
@@ -152,12 +160,14 @@ export async function fetchActiveCountPerSection(
         `
         id,
         status,
+        deleted,
         task_template:task_template_id!inner(
           section_id
         )
       `
       )
       .eq("date", date)
+      .eq("deleted", false)
       .in("status", ["active", "in progress"]);
 
     if (error) throw error;

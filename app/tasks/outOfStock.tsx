@@ -59,6 +59,7 @@ export default function OutOfStockScreen() {
     handleSetOutOfStock,
     handleEditTask,
     handleSetSkip,
+    handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
   async function loadData() {
@@ -197,6 +198,7 @@ export default function OutOfStockScreen() {
         onSetOutOfStock={handleSetOutOfStock}
         onSetSkip={handleSetSkip}
         handleEditTask={handleEditTask}
+        handleDeleteTask={handleDeleteTask}
         onClose={closeModal}
       />
     </View>

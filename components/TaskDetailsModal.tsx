@@ -1,11 +1,10 @@
 import React, { useState } from "react";
-import { Modal, Pressable, View, FlatList, TouchableOpacity, StyleSheet } from "react-native";
+import { Modal, Pressable, View, FlatList, TouchableOpacity, StyleSheet, useWindowDimensions } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AppText from "@/components/AppText";
 import { ProfileData } from "@/services/ProfileContext";
 import { StatusMeta } from "@/constants/statusMeta";
 import EditTaskModal from "@/components/EditTaskModal";
-// import { updateTaskInstanceName } from "@/services/api/taskInstances";
 import { deleteTaskInstance } from "@/services/api/taskInstances";
 
 export type TaskRow = {
@@ -50,6 +49,7 @@ interface TaskDetailsModalProps {
   generateInitials: (firstName?: string, lastName?: string) => string;
   getColorFromId: (id: string) => string;
   handleEditTask: (newName: string) => Promise<void>;
+  handleDeleteTask: () => Promise<void>;
 }
 
 export default function TaskDetailsModal({
@@ -69,9 +69,12 @@ export default function TaskDetailsModal({
   getColorFromId,
   onSetSkip,
   handleEditTask,
+  handleDeleteTask,
 }: TaskDetailsModalProps) {
   if (!selectedTask) return null;
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
+  const { width, height } = useWindowDimensions();
+  const isTabletLandscape = width > 800 && width > height;
 
   /* ------------------------------------------------------------ */
 
@@ -211,9 +214,8 @@ export default function TaskDetailsModal({
                 setShowEditTaskModal(false);
               }}
               onDelete={async () => {
-                await deleteTaskInstance(selectedTask.id);
+                await handleDeleteTask();
                 setShowEditTaskModal(false);
-                onClose();
               }}
               onClose={() => setShowEditTaskModal(false)}
             />
