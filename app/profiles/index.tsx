@@ -35,7 +35,7 @@ export default function ChooseProfileScreen() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
-  /* State voor “Edit/Delete profile” modal */
+  /* State voor "Edit/Delete profile" modal */
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFirstName, setEditFirstName] = useState("");
   const [editLastName, setEditLastName] = useState("");
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
 
-  /* “+ Voeg kok toe” button */
+  /* "Voeg kok toe" button */
   addProfileButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -537,11 +537,10 @@ const styles = StyleSheet.create({
     }),
     borderRadius: 50,
     alignItems: "center",
-    backgroundColor: "#017cff99",
-    // backgroundColor: "#000",
+    backgroundColor: "#000",
   },
   saveButtonText: {
-    color: "#000",
+    color: "#fff",
     fontSize: 17,
   },
   deleteButton: {
@@ -550,8 +549,8 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     alignItems: "center",
     backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#f61212",
+    borderWidth: 2,
+    borderColor: "rgba(0, 0, 0, 0.1)",
   },
   deleteButtonText: {
     color: "#000",

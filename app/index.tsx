@@ -843,13 +843,10 @@ const styles = StyleSheet.create({
     }),
     borderRadius: 50,
     alignItems: "center",
-    backgroundColor: "#017cff99",
-    // backgroundColor: "#000",
+    backgroundColor: "#000",
   },
   saveButtonText: {
-    color: "#000",
+    color: "#fff",
     fontSize: 17,
-    // color: "#fff",
-    // fontWeight: "bold",
   },
 });

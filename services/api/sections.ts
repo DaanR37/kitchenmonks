@@ -13,7 +13,8 @@ export async function fetchSections(kitchenId: string, date: string) {
     .select("*, task_templates: task_templates!task_templates_section_id_fkey(*)")
     .eq("kitchen_id", kitchenId)
     .lte("start_date", date)
-    .gte("end_date", date);
+    .gte("end_date", date)
+    .order("created_at", { ascending: true });
 
   if (error) throw error;
   return data;

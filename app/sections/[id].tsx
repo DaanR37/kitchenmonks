@@ -94,7 +94,7 @@ export default function SingleSectionScreen() {
         }
       )
       .subscribe();
-  
+
     return () => {
       channel.unsubscribe();
     };
@@ -727,14 +727,11 @@ const styles = StyleSheet.create({
     }),
     borderRadius: 50,
     alignItems: "center",
-    backgroundColor: "#017cff99",
-    // backgroundColor: "#000",
+    backgroundColor: "#000",
   },
   saveButtonText: {
-    color: "#000",
     fontSize: 17,
-    // color: "#fff",
-    // fontWeight: "bold",
+    color: "#fff",
   },
   deleteButton: {
     padding: 16,
@@ -742,8 +739,8 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     alignItems: "center",
     backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#f61212",
+    borderWidth: 2,
+    borderColor: "rgba(0, 0, 0, 0.1)",
   },
   deleteButtonText: {
     color: "#000",

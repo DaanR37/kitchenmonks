@@ -36,12 +36,7 @@ export async function getTasksForSectionOnDate(sectionId: string, selectedDate: 
 
     if (data && !data.deleted) {
       tasks.push({ ...data, task_name: template.task_name });
-    } 
-    // else {
-    //   /* Als er geen instance bestaat, kun je er eentje aanmaken (of default gebruiken) */
-    //   const newInstance = await createTaskInstance(template.id, selectedDate);
-    //   tasks.push({ ...newInstance, task_name: template.task_name });
-    // }
+    }
   }
   return tasks;
 }
