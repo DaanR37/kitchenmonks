@@ -1,4 +1,6 @@
 import { supabase } from "@/services/supabaseClient";
+import { eachDayOfInterval, format } from "date-fns";
+import { createTaskInstance } from "./taskInstances";
 
 /*
   createTaskTemplate:
@@ -10,13 +12,36 @@ import { supabase } from "@/services/supabaseClient";
       endDate: De datum tot wanneer deze template geldig is.
   - Belangrijk: Zorg ervoor dat de kolomnaam voor de einddatum exact overeenkomt met de database (dus "end_date").
 */
+// export async function createTaskTemplate(
+//   sectionId: string,
+//   taskName: string,
+//   startDate: string,
+//   endDate: string
+// ) {
+//   const { data, error } = await supabase
+//     .from("task_templates")
+//     .insert([
+//       { 
+//         section_id: sectionId, 
+//         task_name: taskName, 
+//         start_date: startDate, 
+//         end_date: endDate 
+//       }
+//     ])
+//     .select() /* Retourneer de ingevoegde rij */
+//     .maybeSingle(); /* Verwacht één enkele rij */
+
+//   if (error) throw error;
+//   return data;
+// }
+
 export async function createTaskTemplate(
   sectionId: string,
   taskName: string,
   startDate: string,
   endDate: string
 ) {
-  const { data, error } = await supabase
+  const { data: template, error } = await supabase
     .from("task_templates")
     .insert([
       { 
@@ -26,13 +51,41 @@ export async function createTaskTemplate(
         end_date: endDate 
       }
     ])
-    .select() /* Retourneer de ingevoegde rij */
-    .maybeSingle(); /* Verwacht één enkele rij */
+    .select()
+    .maybeSingle();
 
   if (error) throw error;
-  return data;
+
+  // 🔁 Backfill alle dagen in range
+  const allDates = eachDayOfInterval({
+    start: new Date(startDate),
+    end: new Date(endDate),
+  });
+
+  for (const day of allDates) {
+    const date = format(day, "yyyy-MM-dd");
+
+    const { count } = await supabase
+      .from("task_instances")
+      .select("id", { count: "exact", head: true })
+      .eq("task_template_id", template.id)
+      .eq("date", date);
+
+    if (count === 0) {
+      await createTaskInstance(template.id, date);
+    }
+  }
+
+  return template;
 }
 
+/*
+  updateTaskTemplateName:
+  - Doel: Werk de naam van een bestaande taaktemplate bij.
+  - Parameters:
+      taskTemplateId: Het ID van de taaktemplate die je wilt bijwerken.
+      newName: De nieuwe naam voor de taaktemplate.
+*/
 export async function updateTaskTemplateName(taskTemplateId: string, newName: string) {
   const { data, error } = await supabase
     .from("task_templates")

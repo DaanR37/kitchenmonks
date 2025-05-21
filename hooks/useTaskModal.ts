@@ -139,7 +139,7 @@ export default function useTaskModal({
     try {
       await deleteTaskInstance(selectedTask.id);
 
-      // ❗ Filter de task direct uit lokale state:
+      /* Filter de task direct uit lokale state: */
       setSections((prev) =>
         prev.map((sec) =>
           sec.id === selectedTask.section.id
@@ -151,7 +151,7 @@ export default function useTaskModal({
         )
       );
 
-      // ❗ Sluit de modals netjes af
+      /* Sluit de modals netjes af */
       closeModal();
     } catch (error) {
       console.error("Fout bij verwijderen taak:", error);

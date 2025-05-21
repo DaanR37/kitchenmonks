@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useState } from "react";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   View,
   Image,
@@ -34,11 +34,11 @@ import AllTasksTabletView from "@/components/AllTasksTabletView";
 import TeamMepTabletView from "@/components/TeamMepTabletView";
 import MyMepTabletView from "@/components/MyMepTabletView";
 import OutOfStockTabletView from "@/components/OutOfStockTabletView";
-import { backfillTaskInstances, getTasksForSectionOnDate } from "@/services/api/taskHelpers";
+import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import NoStatusTabletView from "@/components/NoStatusTabletView";
 import LoadingSpinner from "@/components/LoadingSpinner";
-import throttle from "lodash.throttle";
 
+/* Types */
 type Task = {
   id: string;
   status: string;
@@ -47,7 +47,6 @@ type Task = {
   end_date: string;
   assigned_to?: string[];
 };
-
 type SectionData = {
   id: string;
   section_name: string;
@@ -66,18 +65,24 @@ export default function HomeScreen() {
   const { selectedDate, setSelectedDate } = useContext(DateContext);
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loadingSections, setLoadingSections] = useState(true);
+
+  /* State voor counts */
   const [myMepCount, setMyMepCount] = useState(0);
   const [teamMepCount, setTeamMepCount] = useState(0);
   const [allPercentage, setAllPercentage] = useState(0);
   const [outOfStockCount, setOutOfStockCount] = useState(0);
   const [noStatusCount, setNoStatusCount] = useState(0);
 
+  /* State voor Boolean values */
   const [hasAllData, setHasAllData] = useState(false);
   const [hasMyMepData, setHasMyMepData] = useState(false);
   const [hasTeamMepData, setHasTeamMepData] = useState(false);
   const [hasOutOfStockData, setHasOutOfStockData] = useState(false);
   const [hasNoStatusData, setHasNoStatusData] = useState(false);
   const [activeTasksCountPerSection, setActiveTasksCountPerSection] = useState<Record<string, number>>({});
+  const [activeTab, setActiveTab] = useState<"allTasks" | "teamMep" | "myMep" | "outOfStock" | "noStatus">(
+    "allTasks"
+  );
 
   /* State voor Modal -> nieuwe sectie toevoegen */
   const [showAddModal, setShowAddModal] = useState(false);
@@ -86,17 +91,6 @@ export default function HomeScreen() {
   const [newSectionEndDate, setNewSectionEndDate] = useState<string>(selectedDate);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [activeTab, setActiveTab] = useState<"allTasks" | "teamMep" | "myMep" | "outOfStock" | "noStatus">(
-    "allTasks"
-  );
-
-  /* Debounced/throttled fetch functie */
-  const throttledLoadSections = useCallback(
-    throttle(() => {
-      loadSectionsWithTasksAndUpdateStats();
-    }, 500),
-    [user, activeProfile, selectedDate]
-  );
 
   /* Check of de user ingelogd is - anders redirect naar auth/login */
   useEffect(() => {
@@ -105,79 +99,104 @@ export default function HomeScreen() {
     }
   }, [loading, user]);
 
-  /* Initial load of bij datum/profielwissel */
-  useEffect(() => {
-    // console.log("▶ useEffect [user, activeProfile, selectedDate] triggered");
-    if (user && selectedDate) {
-      loadSectionsWithTasksAndUpdateStats();
-    }
-  }, [user, activeProfile, selectedDate]);
-
-  /* Realtime listener → alleen aanmaken bij login */
+  /* Realtime listener */
   useEffect(() => {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
 
-    // console.log("▶ Supabase realtime subscriptions aangemaakt");
-
-    /* Channel voor task_instances updates */
     const taskChannel = supabase
       .channel("taskInstancesChannel")
-      .on("postgres_changes", { event: "*", schema: "public", table: "task_instances" }, (payload: any) => {
-        const templateId = payload.new?.task_template_id;
-        if (!templateId || payload.new?.deleted) return;
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "task_instances" },
+        async (payload: any) => {
+          const templateId = payload.new?.task_template_id;
+          if (!templateId || payload.new?.deleted) return;
 
-        supabase
-          .from("task_templates")
-          .select("section_id, section:section_id(id, kitchen_id)")
-          .eq("id", templateId)
-          .maybeSingle()
-          .then(({ data, error }) => {
-            const typedData = data as { section?: { kitchen_id: string } } | null;
-            if (!typedData || typedData.section?.kitchen_id !== user.user_metadata.kitchen_id) return;
-            loadSectionsWithTasksAndUpdateStats();
-          });
-      })
+          const { data } = (await supabase
+            .from("task_templates")
+            .select("section:section_id(id, kitchen_id)")
+            .eq("id", templateId)
+            .maybeSingle()) as { data: { section: { id: string; kitchen_id: string } } | null };
+
+          if (data?.section?.kitchen_id === kitchenId) {
+            console.log("🔁 Task update → refresh stats");
+            loadStats();
+            // loadSections();
+          }
+        }
+      )
       .subscribe();
 
-    /* Channel voor sections updates */
     const sectionChannel = supabase
       .channel("sectionsChannel")
-      .on("postgres_changes", { event: "*", schema: "public", table: "sections" }, (payload: any) => {
-        console.log("▶ Realtime sections payload ontvangen:", payload);
-
-        if (payload?.new?.kitchen_id === kitchenId) {
-          console.log("▶ Realtime sections payload ontvangen:", payload);
-          throttledLoadSections();
+      .on("postgres_changes", { event: "*", schema: "public", table: "sections" }, async (payload: any) => {
+        const payloadKitchenId = payload.new?.kitchen_id ?? payload.old?.kitchen_id;
+        if (payloadKitchenId === kitchenId) {
+          console.log("🔁 Section update → refresh sections");
+          loadSections();
+          // loadStats();
         }
       })
       .subscribe();
 
     return () => {
-      console.log("▶ Supabase channel unsubscribed");
       taskChannel.unsubscribe();
       sectionChannel.unsubscribe();
     };
   }, [user, selectedDate]);
 
-  async function loadSectionsWithTasksAndUpdateStats() {
+  /* Initial load of bij datum/profielwissel */
+  useEffect(() => {
+    if (user && selectedDate) {
+      refreshAll();
+    }
+  }, [user, activeProfile, selectedDate]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user && selectedDate) {
+        loadSections();
+        loadStats();
+      }
+    }, [user, selectedDate])
+  );
+
+  /* ------------------------------------------------------------ */
+
+  /* Laad alle sections */
+  const loadSections = async () => {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
 
-    // console.log("▶ loadSectionsWithTasksAndUpdateStats START");
     setLoadingSections(true);
     try {
-      // 1 Haal secties op
       const secs = await fetchSections(kitchenId, selectedDate);
-      // console.log("▶ fetched sections");
+      setSections(secs);
+    } catch (err) {
+      console.error("Error loading sections:", err);
+    } finally {
+      setLoadingSections(false);
+    }
+  };
 
-      // 2 Haal taken per sectie op en verrijk met section-info
+  /* Laad alle stats */
+  const loadStats = async () => {
+    if (!user) return;
+    const kitchenId = user.user_metadata?.kitchen_id;
+    if (!kitchenId) return;
+
+    try {
+      /* 1. Haal alle sections op */
+      const secs = await fetchSections(kitchenId, selectedDate);
+
+      /* 2. Haal taken per sectie op (alleen voor stats purposes) */
       const mergedSections: SectionData[] = await Promise.all(
         secs.map(async (section: any) => {
           const tasks = await getTasksForSectionOnDate(section.id, selectedDate);
-          console.log("▶ fetched stats");
+          // console.log("▶ fetched stats");
           return {
             id: section.id,
             section_name: section.section_name ?? section.name,
@@ -188,60 +207,58 @@ export default function HomeScreen() {
         })
       );
 
+      /* 3. Haal alle taken op */
       const allTasks = mergedSections.flatMap((sec) => sec.task_templates);
 
+      /* 4. Bepaal booleans op basis van alle taken */
       const hasAll = allTasks.length > 0;
-      setHasAllData(hasAll);
-
       const hasMyMep = allTasks.some(
         (task) => activeProfile?.id && task.assigned_to?.includes(activeProfile.id)
       );
-      setHasMyMepData(hasMyMep);
-
-      const hasTeamMep = allTasks.length > 0; // of specifieker als je wilt
-      setHasTeamMepData(hasTeamMep);
-
+      const hasTeamMep = allTasks.length > 0;
       const hasOutOfStock = allTasks.some((task) => task.status === "out of stock");
-      setHasOutOfStockData(hasOutOfStock);
-
       const hasNoStatus = allTasks.some((task) => task.status === "inactive");
+
+      setHasAllData(hasAll);
+      setHasMyMepData(hasMyMep);
+      setHasTeamMepData(hasTeamMep);
+      setHasOutOfStockData(hasOutOfStock);
       setHasNoStatusData(hasNoStatus);
 
-      // 3️⃣ Update sections in state (voor weergave in SectionItems)
-      setSections(mergedSections);
-      // console.log("▶ setting sections + stats state");
-
-      // 4️⃣ Haal statistieken direct vanuit Supabase (zoals helpers zijn ontworpen)
+      /* 5. Set counts/percentages via Supabase helpers */
       const allPct = await fetchAllDonePercentage(selectedDate, kitchenId);
       setAllPercentage(allPct);
+
+      const [teamCount, outStockCount, activeCountPerSection] = await Promise.all([
+        fetchActiveTasksCount(selectedDate, kitchenId),
+        fetchOutOfStockTasksCount(selectedDate, kitchenId),
+        fetchActiveCountPerSection(kitchenId, selectedDate),
+      ]);
+      setTeamMepCount(teamCount);
+      setOutOfStockCount(outStockCount);
+      setActiveTasksCountPerSection(activeCountPerSection);
 
       if (activeProfile) {
         const myMepCount = await fetchMyTasksCount(activeProfile.id, selectedDate, kitchenId);
         setMyMepCount(myMepCount);
       }
 
-      const teamCount = await fetchActiveTasksCount(selectedDate, kitchenId);
-      setTeamMepCount(teamCount);
-
-      const outStockCount = await fetchOutOfStockTasksCount(selectedDate, kitchenId);
-      setOutOfStockCount(outStockCount);
-
       const noStatusCount = allTasks.filter((task) => task.status === "inactive").length;
       setNoStatusCount(noStatusCount);
-
-      const activeCountPerSection = await fetchActiveCountPerSection(kitchenId, selectedDate);
-      setActiveTasksCountPerSection(activeCountPerSection);
-
-      // console.log("▶ stats state set");
-    } catch (error: any) {
-      console.error("Error loading sections + stats:", error);
-    } finally {
-      setLoadingSections(false);
+    } catch (error) {
+      console.error("Error loading stats:", error);
     }
-  }
+  };
+
+  /* Refresh alle data */
+  const refreshAll = async () => {
+    setLoadingSections(true);
+    await Promise.all([loadSections(), loadStats()]);
+    setLoadingSections(false);
+  };
 
   /* Creëer een nieuwe sectie met de ingevoerde naam en de start- en einddatum */
-  async function handleCreateSection() {
+  const handleCreateSection = async () => {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId || !newSectionName.trim()) return;
@@ -271,37 +288,19 @@ export default function HomeScreen() {
       console.error("Error creating section:", error.message);
       alert("Er ging iets mis bij het aanmaken van de sectie");
     }
-  }
+  };
 
   /* Verander de geselecteerde datum (bijvoorbeeld vanuit een DateSelector component) */
-  function handleDateChange(newDate: string) {
+  const handleDateChange = (newDate: string) => {
     setSelectedDate(newDate);
-  }
+  };
+
   /* Functie: Druk op een sectie in de lijst */
-  function handlePressSection(sectionId: string) {
+  const handlePressSection = (sectionId: string) => {
     router.push(`/sections/${sectionId}`);
-  }
+  };
 
-  /* Genereer initialen van het actieve profiel, als dit beschikbaar is */
-  function generateInitials(firstName?: string, lastName?: string): string {
-    const firstInitial = firstName ? firstName.charAt(0).toUpperCase() : "";
-    const lastInitial = lastName ? lastName.charAt(0).toUpperCase() : "";
-    return `${firstInitial}${lastInitial}`;
-  }
-  function getColorFromId(id: string): string {
-    const colorPalette = ["#3300ff", "#ff6200", "#00931d", "#d02350"];
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) {
-      hash = id.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const index = Math.abs(hash) % colorPalette.length;
-    return colorPalette[index];
-  }
-
-  const initials = generateInitials(activeProfile?.first_name, activeProfile?.last_name);
-  const avatarColor = activeProfile ? getColorFromId(activeProfile.id) : "#6C63FF";
-
-  /* Add Section Modal */
+  /* Modal - Add Section */
   const renderAddSectionModal = () => {
     return (
       <Modal
@@ -382,6 +381,27 @@ export default function HomeScreen() {
       </Modal>
     );
   };
+
+  /* Genereer initialen van het actieve profiel, als dit beschikbaar is */
+  const generateInitials = (firstName?: string, lastName?: string): string => {
+    const firstInitial = firstName ? firstName.charAt(0).toUpperCase() : "";
+    const lastInitial = lastName ? lastName.charAt(0).toUpperCase() : "";
+    return `${firstInitial}${lastInitial}`;
+  };
+
+  /* Genereer een kleur op basis van de id */
+  const getColorFromId = (id: string): string => {
+    const colorPalette = ["#3300ff", "#ff6200", "#00931d", "#d02350"];
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = id.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % colorPalette.length;
+    return colorPalette[index];
+  };
+
+  const initials = generateInitials(activeProfile?.first_name, activeProfile?.last_name);
+  const avatarColor = activeProfile ? getColorFromId(activeProfile.id) : "#6C63FF";
 
   const tabTitles = {
     allTasks: "All",

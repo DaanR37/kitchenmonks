@@ -1,11 +1,18 @@
 import React, { useState } from "react";
-import { Modal, Pressable, View, FlatList, TouchableOpacity, StyleSheet, useWindowDimensions } from "react-native";
+import {
+  Modal,
+  Pressable,
+  View,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  useWindowDimensions,
+} from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AppText from "@/components/AppText";
 import { ProfileData } from "@/services/ProfileContext";
 import { StatusMeta } from "@/constants/statusMeta";
 import EditTaskModal from "@/components/EditTaskModal";
-// import { deleteTaskInstance } from "@/services/api/taskInstances";
 
 export type TaskRow = {
   id: string;

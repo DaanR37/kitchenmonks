@@ -15,7 +15,7 @@ export async function createTaskInstance(taskTemplateId: string, date: string) {
       {
         task_template_id: taskTemplateId /* Koppeling met de taaktemplate */,
         date: date /* De specifieke datum voor deze instance */,
-        deleted: false,
+        // deleted: false,
       },
     ])
     .select() /* Retourneer de ingevoegde rij (nieuwe taakinstance) */
@@ -43,10 +43,16 @@ export async function updateTaskInstanceStatus(taskInstanceId: string, newStatus
   return data;
 }
 
+/*
+  deleteTaskInstance:
+  - Doel: Verwijder een bestaande taakinstance.
+  - Parameters:
+      taskInstanceId: Het ID van de taakinstance die je wilt verwijderen.
+*/
 export async function deleteTaskInstance(taskInstanceId: string) {
   const { error } = await supabase
     .from("task_instances")
-    .update({ deleted: true })
+    .delete()
     .eq("id", taskInstanceId);
 
   if (error) throw error;
