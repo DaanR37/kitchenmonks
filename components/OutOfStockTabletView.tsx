@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useCallback } from "react";
 import { View, StyleSheet, FlatList, Pressable } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
@@ -14,6 +14,7 @@ import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUti
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
 import LoadingSpinner from "./LoadingSpinner";
+import { useFocusEffect } from "expo-router";
 
 export default function OutOfStockTabletView() {
   const { user } = useContext(AuthContext);
@@ -21,28 +22,6 @@ export default function OutOfStockTabletView() {
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
-
-  /* Haal eerst de profielen op zodra de user beschikbaar is */
-  useEffect(() => {
-    async function loadProfiles() {
-      if (!user) return;
-      const kitchenId = user.user_metadata?.kitchen_id;
-      if (!kitchenId) return;
-      try {
-        const profilesData = await fetchProfiles(kitchenId);
-        setAllProfiles(profilesData);
-      } catch (error) {
-        console.error("Error loading profiles for assignment:", error);
-      }
-    }
-    loadProfiles();
-  }, [user]);
-
-  /* Laad de secties en per sectie de taakinstances voor de geselecteerde datum */
-  useEffect(() => {
-    if (!user) return;
-    loadData();
-  }, [user, selectedDate]);
 
   const {
     selectedTask,
@@ -60,35 +39,72 @@ export default function OutOfStockTabletView() {
     handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
-  async function loadData() {
+  /* ------------------------------------------------------------ */
+
+  /* Haal eerst de profielen op zodra de user beschikbaar is */
+  useEffect(() => {
+    async function loadProfiles() {
+      if (!user) return;
+      const kitchenId = user.user_metadata?.kitchen_id;
+      if (!kitchenId) return;
+      try {
+        const profilesData = await fetchProfiles(kitchenId);
+        setAllProfiles(profilesData);
+      } catch (error) {
+        console.error("Error loading profiles for assignment:", error);
+      }
+    }
+    loadProfiles();
+  }, [user]);
+
+  /* ------------------------------------------------------------ */
+
+  const loadData = async () => {
+    if (!user) return;
+    const kitchenId = user.user_metadata.kitchen_id;
+
     setLoading(true);
-    const kitchenId = user!.user_metadata.kitchen_id;
-    const secs = await fetchSections(kitchenId, selectedDate);
-    const mapped = await Promise.all(
-      secs.map(async (sec) => {
-        const tasks = await getTasksForSectionOnDate(sec.id, selectedDate);
-        const filtered = tasks.filter((t) => t.status === "out of stock");
-        const withSection = filtered.map((t) => ({
-          ...t,
-          section: {
+    try {
+      const secs = await fetchSections(kitchenId, selectedDate);
+
+      const mapped: SectionData[] = await Promise.all(
+        secs.map(async (sec) => {
+          const tasks = await getTasksForSectionOnDate(sec.id, selectedDate);
+          const filtered = tasks.filter((t) => t.status === "out of stock");
+
+          const withSection = filtered.map((t) => ({
+            ...t,
+            section: {
+              id: sec.id,
+              section_name: sec.section_name,
+              start_date: sec.start_date,
+              end_date: sec.end_date,
+            },
+          }));
+
+          return {
             id: sec.id,
             section_name: sec.section_name,
             start_date: sec.start_date,
             end_date: sec.end_date,
-          },
-        }));
-        return {
-          id: sec.id,
-          section_name: sec.section_name,
-          start_date: sec.start_date,
-          end_date: sec.end_date,
-          tasks: withSection,
-        };
-      })
-    );
-    setSections(mapped.filter((s) => s.tasks.length > 0));
-    setLoading(false);
-  }
+            tasks: withSection,
+          };
+        })
+      );
+
+      setSections(mapped.filter((s) => s.tasks.length > 0));
+    } catch (error) {
+      console.error("Error loading out-of-stock tasks:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [user, selectedDate])
+  );
 
   /* Handle the circle press */
   const handleCirclePress = async (task: TaskRow) => {

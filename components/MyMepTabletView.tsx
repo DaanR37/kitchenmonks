@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useCallback } from "react";
 import { View, StyleSheet, FlatList, Pressable } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
@@ -14,6 +14,7 @@ import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUti
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
 import LoadingSpinner from "./LoadingSpinner";
+import { useFocusEffect } from "expo-router";
 
 export default function MyMepTabletView() {
   const { user } = useContext(AuthContext);
@@ -22,27 +23,6 @@ export default function MyMepTabletView() {
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
-
-  /* Haal eerst de profielen op zodra de user beschikbaar is */
-  useEffect(() => {
-    async function loadProfiles() {
-      if (!user) return;
-      const kitchenId = user.user_metadata?.kitchen_id;
-      if (!kitchenId) return;
-      try {
-        const profilesData = await fetchProfiles(kitchenId);
-        setAllProfiles(profilesData);
-      } catch (error) {
-        console.error("Error loading profiles for assignment:", error);
-      }
-    }
-    loadProfiles();
-  }, [user]);
-
-  /* Laad de secties en per sectie de taakinstances voor de geselecteerde datum */
-  useEffect(() => {
-    loadData();
-  }, [selectedDate]);
 
   const {
     selectedTask,
@@ -60,32 +40,46 @@ export default function MyMepTabletView() {
     handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
-  /* loadData:
-  - Haal alle secties op voor de keuken
-  - Voor elke sectie: haal de taken op voor de geselecteerde datum
-  - Filter de taken: toon alleen taken waarvoor de actieve profiel-ID voorkomt in de assigned_to array
-  - Voeg de parent sectie-gegevens toe aan elke taak zodat deze beschikbaar zijn voor de modal
-  */
-  async function loadData() {
+  /* ------------------------------------------------------------ */
+
+  /* Haal eerst de profielen op zodra de user beschikbaar is */
+  useEffect(() => {
+    async function loadProfiles() {
+      if (!user) return;
+      const kitchenId = user.user_metadata?.kitchen_id;
+      if (!kitchenId) return;
+      try {
+        const profilesData = await fetchProfiles(kitchenId);
+        setAllProfiles(profilesData);
+      } catch (error) {
+        console.error("Error loading profiles for assignment:", error);
+      }
+    }
+    loadProfiles();
+  }, [user]);
+
+  /* ------------------------------------------------------------ */
+
+  const loadData = async () => {
     if (!user || !activeProfile) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
 
     setLoading(true);
     try {
-      // 1) Haal alle secties op voor de keuken (datumfilter niet toepassen, want secties vormen de vaste menukaart)
+      // 1️⃣ Haal alle secties op (menu)
       const secs = await fetchSections(kitchenId, selectedDate);
 
-      // 2) Voor elke sectie: haal de taken op voor de geselecteerde datum en voeg de section-data toe
+      // 2️⃣ Voor elke sectie: haal de taken op voor de geselecteerde dag
       const merged: SectionData[] = await Promise.all(
         secs.map(async (sec: any) => {
-          // Haal de taken op voor de sectie via de helper functie
           const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
-          // Filter de taken: toon alleen taken waarvoor de actieve profiel-ID voorkomt in de assigned_to array
-          const filteredTasks = allTasks.filter((task: TaskRow) => {
-            return task.assigned_to?.includes(activeProfile.id);
-          });
-          // Voeg de parent sectie-gegevens toe aan elke taak zodat deze beschikbaar zijn voor de modal
+
+          // 3️⃣ Filter op taken die aan jou zijn toegewezen
+          const filteredTasks = allTasks.filter((task: TaskRow) =>
+            task.assigned_to?.includes(activeProfile.id)
+          );
+
           const tasksWithSection = filteredTasks.map((t: any) => ({
             ...t,
             section: {
@@ -95,6 +89,7 @@ export default function MyMepTabletView() {
               end_date: sec.end_date,
             },
           }));
+
           return {
             id: sec.id,
             section_name: sec.section_name,
@@ -104,15 +99,23 @@ export default function MyMepTabletView() {
           };
         })
       );
-      // Optioneel: Filter secties waar geen enkele taak is toegewezen aan activeProfile
-      const sectionsWithTasks = merged.filter((sec) => sec.tasks.length > 0);
-      setSections(sectionsWithTasks);
+
+      // 4️⃣ Alleen secties met taken tonen
+      setSections(merged.filter((sec) => sec.tasks.length > 0));
     } catch (error) {
       console.log("Error loading my tasks:", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [user, selectedDate, activeProfile])
+  );
+
+  /* ------------------------------------------------------------ */
 
   /* Handle the circle press */
   const handleCirclePress = async (task: TaskRow) => {

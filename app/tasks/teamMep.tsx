@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useCallback } from "react";
 import { View, StyleSheet, TouchableOpacity, FlatList, Pressable, Platform } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
+import {
+  fetchTaskInstancesWithSection,
+} from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
 import useTaskModal, { TaskRow, SectionData } from "@/hooks/useTaskModal";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
@@ -23,27 +25,6 @@ export default function TeamMepScreen() {
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
 
-  /* Haal eerst de profielen op zodra de user beschikbaar is */
-  useEffect(() => {
-    async function loadProfiles() {
-      if (!user) return;
-      const kitchenId = user.user_metadata?.kitchen_id;
-      if (!kitchenId) return;
-      try {
-        const profilesData = await fetchProfiles(kitchenId);
-        setAllProfiles(profilesData);
-      } catch (error) {
-        console.error("Error loading profiles for assignment:", error);
-      }
-    }
-    loadProfiles();
-  }, [user]);
-
-  /* Laad de secties en per sectie de taakinstances voor de geselecteerde datum */
-  useEffect(() => {
-    loadData();
-  }, [selectedDate]);
-
   const {
     selectedTask,
     showDetailsModal,
@@ -60,65 +41,95 @@ export default function TeamMepScreen() {
     handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
-  /*
-    loadData:
-    1. Controleer of de user en kitchen_id beschikbaar zijn.
-    2. Haal alle secties op voor deze keuken via fetchSections.
-    3. Voor elke sectie roep je de helperfunctie getTasksForSectionOnDate aan,
-       die de geldige task_instances (of indien afwezig, nieuwe instances) ophaalt voor de selectedDate.
-    4. Combineer (merge) de secties met hun taken en sla dit op in de lokale state.
-  */
-  async function loadData() {
+  /* ------------------------------------------------------------ */
+
+  /* Haal eerst de profielen op zodra de user beschikbaar is */
+  useEffect(() => {
+    async function loadProfiles() {
+      if (!user) return;
+      const kitchenId = user.user_metadata?.kitchen_id;
+      if (!kitchenId) return;
+      try {
+        const profilesData = await fetchProfiles(kitchenId);
+        setAllProfiles(profilesData);
+      } catch (error) {
+        console.error("Error loading profiles for assignment:", error);
+      }
+    }
+    loadProfiles();
+  }, [user]);
+
+  /* ------------------------------------------------------------ */
+
+  const loadData = async () => {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
-
+  
     setLoading(true);
     try {
-      /* 1) Haal alle secties op voor de keuken */
-      const secs = await fetchSections(kitchenId, selectedDate);
-      /* 2) Voor elke sectie: haal de taken voor de geselecteerde datum op en voeg de section-gegevens (inclusief datums) toe */
-      const merged: SectionData[] = await Promise.all(
-        secs.map(async (sec: any) => {
-          /* Haal de taken op voor deze sectie voor de geselecteerde datum. */
-          const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
-
-          const tasks = allTasks
-            .filter(
-              (t) =>
-                t.status === "active" ||
-                t.status === "in progress" ||
-                t.status === "done" ||
-                t.status === "out of stock"
-            )
-            .map((t: any) => ({
-              ...t,
-              section: {
-                id: sec.id,
-                section_name: sec.section_name,
-                start_date: sec.start_date,
-                end_date: sec.end_date,
-              },
-            }));
-
-          return {
-            id: sec.id,
-            section_name: sec.section_name,
-            start_date: sec.start_date,
-            end_date: sec.end_date,
-            tasks,
-          } as SectionData;
-        })
+      // 1) Haal alle secties op
+      const sections = await fetchSections(kitchenId, selectedDate);
+  
+      // 2) Haal alle task_instances op met section-info
+      const instances = await fetchTaskInstancesWithSection(selectedDate, kitchenId);
+  
+      console.log("▶ fetched team mep instances", instances.length);
+  
+      // 3) Filter alleen de taken die NIET inactive zijn
+      const filtered = instances.filter(
+        (t: any) =>
+          t.status === "active" ||
+          t.status === "in progress" ||
+          t.status === "done" ||
+          t.status === "out of stock"
       );
-      // setSections(merged);
-      /* drop lege secties */
-      setSections(merged.filter((s) => s.tasks.length > 0));
+  
+      // 4) Zorg dat elke task het juiste format heeft: voeg task_name & section toe
+      const enriched = filtered.map((t: any) => ({
+        ...t,
+        task_name: t.task_template?.task_name ?? "Onbekend",
+        section: t.task_template?.section ?? {},
+        section_id: t.task_template?.section?.id ?? null,
+      }));
+  
+      // 5) Groepeer de taken per sectie
+      const grouped: SectionData[] = sections.map((sec: any) => {
+        const tasks = enriched
+          .filter((t: any) => t.section_id === sec.id)
+          .map((t: any) => ({
+            ...t,
+            section: {
+              id: sec.id,
+              section_name: sec.section_name,
+              start_date: sec.start_date,
+              end_date: sec.end_date,
+            },
+          }));
+  
+        return {
+          id: sec.id,
+          section_name: sec.section_name,
+          start_date: sec.start_date,
+          end_date: sec.end_date,
+          tasks,
+        };
+      });
+  
+      // 6) Zet alleen secties die minstens 1 taak bevatten
+      setSections(grouped.filter((s) => s.tasks.length > 0));
     } catch (error) {
-      console.log("Error loading inactive tasks:", error);
+      console.error("Error loading Team MEP screen:", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [user, selectedDate])
+  );
 
   /* Handle the circle press */
   const handleCirclePress = async (task: TaskRow) => {

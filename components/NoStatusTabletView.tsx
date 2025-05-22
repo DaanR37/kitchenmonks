@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useContext } from "react";
-import { View, StyleSheet, TouchableOpacity, FlatList, Pressable } from "react-native";
+import React, { useState, useEffect, useContext, useCallback } from "react";
+import { View, StyleSheet, FlatList, Pressable } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
-import { ProfileContext, ProfileData } from "@/services/ProfileContext";
+import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
 import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
@@ -13,6 +13,7 @@ import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
 import AppText from "@/components/AppText";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
 import LoadingSpinner from "./LoadingSpinner";
+import { useFocusEffect } from "expo-router";
 
 export default function NoStatusTabletView() {
   const { user } = useContext(AuthContext);
@@ -20,27 +21,6 @@ export default function NoStatusTabletView() {
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
-
-  /* Haal eerst de profielen op zodra de user beschikbaar is */
-  useEffect(() => {
-    async function loadProfiles() {
-      if (!user) return;
-      const kitchenId = user.user_metadata?.kitchen_id;
-      if (!kitchenId) return;
-      try {
-        const profilesData = await fetchProfiles(kitchenId);
-        setAllProfiles(profilesData);
-      } catch (error) {
-        console.error("Error loading profiles for assignment:", error);
-      }
-    }
-    loadProfiles();
-  }, [user]);
-
-  /* Laad de secties en per sectie de taakinstances voor de geselecteerde datum */
-  useEffect(() => {
-    loadData();
-  }, [selectedDate]);
 
   const {
     selectedTask,
@@ -58,26 +38,43 @@ export default function NoStatusTabletView() {
     handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
-  async function loadData() {
+  /* ------------------------------------------------------------ */
+
+  /* Haal eerst de profielen op zodra de user beschikbaar is */
+  useEffect(() => {
+    async function loadProfiles() {
+      if (!user) return;
+      const kitchenId = user.user_metadata?.kitchen_id;
+      if (!kitchenId) return;
+      try {
+        const profilesData = await fetchProfiles(kitchenId);
+        setAllProfiles(profilesData);
+      } catch (error) {
+        console.error("Error loading profiles for assignment:", error);
+      }
+    }
+    loadProfiles();
+  }, [user]);
+
+  /* ------------------------------------------------------------ */
+
+  const loadData = async () => {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
 
     setLoading(true);
     try {
-      // 1️⃣ Haal alle secties op voor de keuken
+      // 1. Haal alle secties op
       const secs = await fetchSections(kitchenId, selectedDate);
 
-      // 2️⃣ Voor elke sectie: haal de taken op voor de geselecteerde datum en filter op 'inactive'
+      // 2. Per sectie: haal taken op via getTasksForSectionOnDate
       const merged: SectionData[] = await Promise.all(
         secs.map(async (sec: any) => {
           const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
+          const filtered = allTasks.filter((t: TaskRow) => t.status === "inactive");
 
-          // Filter alleen taken met status 'inactive'
-          const filteredTasks = allTasks.filter((task: TaskRow) => task.status === "inactive");
-
-          // Voeg section-data toe aan elke taak
-          const tasksWithSection = filteredTasks.map((t: any) => ({
+          const tasksWithSection = filtered.map((t: TaskRow) => ({
             ...t,
             section: {
               id: sec.id,
@@ -97,17 +94,20 @@ export default function NoStatusTabletView() {
         })
       );
 
-      // 3️⃣ Filter secties waar minstens één taak overblijft
-      const sectionsWithTasks = merged.filter((sec) => sec.tasks.length > 0);
-
-      // 4️⃣ Zet de state
-      setSections(sectionsWithTasks);
-    } catch (error) {
-      console.error("Error loading no status tasks:", error);
+      // 3. Alleen secties met minstens één taak
+      setSections(merged.filter((sec) => sec.tasks.length > 0));
+    } catch (err) {
+      console.error("Error loading No Status tasks:", err);
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [user, selectedDate])
+  );
 
   /* Handle the circle press */
   const handleCirclePress = async (task: TaskRow) => {

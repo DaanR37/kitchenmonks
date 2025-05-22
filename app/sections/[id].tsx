@@ -28,6 +28,7 @@ import TaskDetailsModal from "@/components/TaskDetailsModal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { formatDateString } from "@/components/DateSelector";
 import { supabase } from "@/services/supabaseClient";
+import { fetchTaskInstancesWithSectionForScreens } from "@/services/api/taskHelpers";
 
 export default function SingleSectionScreen() {
   const router = useRouter();
@@ -66,27 +67,19 @@ export default function SingleSectionScreen() {
     handleSetSkip,
   } = useTaskModal({ sections, setSections });
 
-  useFocusEffect(
-    useCallback(() => {
-      if (typeof id === "string") {
-        loadData(id);
-      }
-    }, [id, user, selectedDate])
-  );
-
   /* Haal eerst de profielen op zodra de user beschikbaar is */
   useEffect(() => {
-    async function loadProfiles() {
-      if (!user) return;
+    if (!user) return;
+    const loadProfiles = async () => {
       const kitchenId = user.user_metadata?.kitchen_id;
       if (!kitchenId) return;
       try {
-        const profilesData = await fetchProfiles(kitchenId);
-        setAllProfiles(profilesData);
-      } catch (error) {
-        console.error("Error loading profiles for assignment:", error);
+        const profiles = await fetchProfiles(kitchenId);
+        setAllProfiles(profiles);
+      } catch (err) {
+        console.error("Error loading profiles:", err);
       }
-    }
+    };
     loadProfiles();
   }, [user]);
 
@@ -100,62 +93,136 @@ export default function SingleSectionScreen() {
   };
 
   const loadSectionTasks = async (sectionId: string, sectionMeta: any) => {
-    const tasks = await getTasksForSectionOnDate(sectionId, selectedDate);
-    return tasks.map((task: any) => ({
-      ...task,
-      section: {
-        id: sectionMeta.id,
-        section_name: sectionMeta.section_name,
-        start_date: sectionMeta.start_date,
-        end_date: sectionMeta.end_date,
-      },
-    }));
-  };
+    const kitchenId = user?.user_metadata?.kitchen_id;
+    if (!kitchenId) return [];
 
-  const loadData = async (sectionId: string) => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const sectionMeta = await loadSectionMeta(sectionId);
-      if (!sectionMeta) return;
+    const allInstances = await fetchTaskInstancesWithSectionForScreens(kitchenId, selectedDate);
 
-      const tasks = await loadSectionTasks(sectionId, sectionMeta);
-
-      setSections([
-        {
+    return allInstances
+      .filter((t) => t.task_template?.section_id === sectionId)
+      .map((task: any) => ({
+        ...task,
+        section: {
           id: sectionMeta.id,
           section_name: sectionMeta.section_name,
           start_date: sectionMeta.start_date,
           end_date: sectionMeta.end_date,
-          tasks,
         },
-      ]);
-    } catch (error) {
-      console.error("Fout bij laden van sectie:", error);
-    } finally {
-      setLoading(false);
-    }
+      }));
   };
 
-  const handleCreateTask = async () => {
+  const loadData = useCallback(
+    async (sectionId: string) => {
+      if (!user) return;
+      setLoading(true);
+      try {
+        const sectionMeta = await loadSectionMeta(sectionId);
+        if (!sectionMeta) return;
+
+        const tasks = await loadSectionTasks(sectionId, sectionMeta);
+
+        setSections([
+          {
+            id: sectionMeta.id,
+            section_name: sectionMeta.section_name,
+            start_date: sectionMeta.start_date,
+            end_date: sectionMeta.end_date,
+            tasks,
+          },
+        ]);
+      } catch (error) {
+        console.error("Fout bij laden van sectie:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user, selectedDate]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (typeof id === "string") {
+        loadData(id);
+      }
+    }, [id, loadData])
+  );
+
+  // const handleCreateTask = async () => {
+  //   if (!user) return;
+  //   const kitchenId = user.user_metadata?.kitchen_id;
+  //   if (!kitchenId || !addTaskSectionId || !newTaskName.trim()) return;
+
+  //   const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
+  //   if (!sectionObj) return;
+
+  //   try {
+  //     const newTemplate = await createTaskTemplate(
+  //       addTaskSectionId,
+  //       newTaskName + " " + new Date().getTime(),
+  //       sectionObj.start_date,
+  //       sectionObj.end_date
+  //     );
+
+  //     const newTask = {
+  //       task_template_id: newTemplate.id,
+  //       date: selectedDate,
+  //       task_name: newTaskName,
+  //       assigned_to: [],
+  //       section: {
+  //         id: sectionObj.id,
+  //         section_name: sectionObj.section_name,
+  //       },
+  //     };
+
+  //     const updatedSections = sections.map((sec) =>
+  //       sec.id === addTaskSectionId ? { ...sec, tasks: [...sec.tasks, newTask] } : sec
+  //     );
+
+  //     setSections(updatedSections as SectionData[]);
+  //   } catch (error) {
+  //     console.error("Error creating task:", error);
+  //   } finally {
+  //     setAddTaskModalVisible(false);
+  //     setNewTaskName("");
+  //   }
+  // };
+
+  async function handleCreateTask() {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
-    if (!kitchenId || !addTaskSectionId || !newTaskName.trim()) return;
+    if (!kitchenId) return;
 
-    const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
-    if (!sectionObj) return;
-
+    /* Controleer of er een sectie is geselecteerd en dat er een taaknaam is ingevoerd */
+    if (!addTaskSectionId || !newTaskName.trim()) return;
     try {
+      /* Zoek de oudersectie op in de lokale state, zodat we de start- en einddatum ervan hebben */
+      const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
+      if (!sectionObj) {
+        console.log("Geen section data gevonden voor addTaskSectionId:", addTaskSectionId);
+        return;
+      }
+
+      /* Maak altijd een nieuwe task template aan. We voegen een timestamp toe voor uniciteit,
+      maar nu gebruiken we de sta  rt_date en end_date van de sectie als de geldigheidsperiode */
       const newTemplate = await createTaskTemplate(
         addTaskSectionId,
         newTaskName + " " + new Date().getTime(),
-        sectionObj.start_date,
-        sectionObj.end_date
+        sectionObj.start_date, // Gebruik de parent start datum
+        sectionObj.end_date // Gebruik de parent eind datum
       );
 
+      // Zoek de juiste task_instance voor de geselecteerde datum
+      const { data: taskInstance, error } = await supabase
+        .from("task_instances")
+        .select("*")
+        .eq("task_template_id", newTemplate.id)
+        .eq("date", selectedDate)
+        .maybeSingle();
+
+      if (error || !taskInstance) throw new Error("Task instance niet gevonden");
+
       const newTask = {
-        task_template_id: newTemplate.id,
-        date: selectedDate,
+        ...taskInstance,
         task_name: newTaskName,
         assigned_to: [],
         section: {
@@ -164,18 +231,28 @@ export default function SingleSectionScreen() {
         },
       };
 
-      const updatedSections = sections.map((sec) =>
-        sec.id === addTaskSectionId ? { ...sec, tasks: [...sec.tasks, newTask] } : sec
-      );
-
-      setSections(updatedSections as SectionData[]);
+      /* Update de lokale state door de nieuwe taak toe te voegen aan de taken van de juiste sectie */
+      const updatedSections = sections.map((sec) => {
+        if (sec.id === addTaskSectionId) {
+          return { ...sec, tasks: [...sec.tasks, newTask] };
+        }
+        return sec;
+      });
+      setSections(updatedSections);
     } catch (error) {
-      console.error("Error creating task:", error);
+      console.log("Error creating task:", error);
     } finally {
-      setAddTaskModalVisible(false);
-      setNewTaskName("");
+      closeAddTaskModal();
     }
-  };
+  }
+
+
+
+
+
+
+
+
 
   /* Handler om changes in de modal op te slaan */
   const handleSaveEditSection = async () => {

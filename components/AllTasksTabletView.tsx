@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useContext } from "react";
-import { View, StyleSheet, TouchableOpacity, FlatList, Pressable } from "react-native";
+import React, { useState, useEffect, useContext, useCallback } from "react";
+import { View, StyleSheet, FlatList, Pressable } from "react-native";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
+import { fetchTaskInstancesWithSectionForScreens, getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
 import AppText from "@/components/AppText";
@@ -14,6 +14,7 @@ import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUti
 import TaskDetailsModal from "@/components/TaskDetailsModal";
 import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
 import LoadingSpinner from "./LoadingSpinner";
+import { useFocusEffect } from "expo-router";
 
 export default function AllTasksTabletView() {
   const { user } = useContext(AuthContext);
@@ -21,34 +22,6 @@ export default function AllTasksTabletView() {
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
-
-  /* Haal eerst de profielen op zodra de user beschikbaar is */
-  useEffect(() => {
-    async function loadProfiles() {
-      if (!user) return;
-      const kitchenId = user.user_metadata?.kitchen_id;
-      if (!kitchenId) return;
-      try {
-        const profilesData = await fetchProfiles(kitchenId);
-        setAllProfiles(profilesData);
-      } catch (error) {
-        console.error("Error loading profiles for assignment:", error);
-      }
-    }
-    loadProfiles();
-  }, [user]);
-
-  // useEffect(() => {
-  //   loadData();
-  // }, [selectedDate]);
-
-  /* 1) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
-  useEffect(() => {
-    if (!user) return;
-    const kitchenId = user.user_metadata?.kitchen_id;
-    if (!kitchenId) return;
-    loadData(kitchenId);
-  }, [user, selectedDate]);
 
   const {
     selectedTask,
@@ -66,47 +39,81 @@ export default function AllTasksTabletView() {
     handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
-  /* 2) laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
-  async function loadData(kitchenId: string) {
+  /* ------------------------------------------------------------ */
+
+  /* Haal eerst de profielen op zodra de user beschikbaar is */
+  useEffect(() => {
+    async function loadProfiles() {
+      if (!user) return;
+      const kitchenId = user.user_metadata?.kitchen_id;
+      if (!kitchenId) return;
+      try {
+        const profilesData = await fetchProfiles(kitchenId);
+        setAllProfiles(profilesData);
+      } catch (error) {
+        console.error("Error loading profiles for assignment:", error);
+      }
+    }
+    loadProfiles();
+  }, [user]);
+
+  /* 1. laadt de secties + ALLE taken voor elke sectie (geen status‑filter) */
+  const loadData = async (kitchenId: string) => {
     setLoading(true);
     try {
-      // a) alle secties ophalen
-      const secs = await fetchSections(kitchenId, selectedDate);
+      const instances = await fetchTaskInstancesWithSectionForScreens(kitchenId, selectedDate);
 
-      // b) voor elke sectie: haal *alle* task‑instances op voor de selectedDate
-      const merged: SectionData[] = await Promise.all(
-        secs.map(async (sec: any) => {
-          const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
+      // 1. Maak een Map van section_id → SectionData met taken erin
+      const sectionMap: Record<string, SectionData> = {};
 
-          // voeg sectie‑metadata toe aan elk task‑object
-          const tasksWithSection: TaskRow[] = allTasks.map((t: any) => ({
-            ...t,
-            section: {
-              id: sec.id,
-              section_name: sec.section_name,
-              start_date: sec.start_date,
-              end_date: sec.end_date,
-            },
-          }));
+      for (const instance of instances) {
+        const section = instance.task_template.section;
+        const sectionId = section.id;
 
-          return {
-            id: sec.id,
-            section_name: sec.section_name,
-            start_date: sec.start_date,
-            end_date: sec.end_date,
-            tasks: tasksWithSection,
+        if (!sectionMap[sectionId]) {
+          sectionMap[sectionId] = {
+            id: sectionId,
+            section_name: section.section_name,
+            start_date: section.start_date,
+            end_date: section.end_date,
+            tasks: [],
           };
-        })
+        }
+
+        sectionMap[sectionId].tasks.push({
+          ...instance,
+          task_name: instance.task_template.task_name,
+          section: {
+            id: sectionId,
+            section_name: section.section_name,
+            start_date: section.start_date,
+            end_date: section.end_date,
+          },
+        });
+      }
+
+      // 2. Zet alles om in een array en sorteer op section_name
+      const mergedSections = Object.values(sectionMap).sort((a, b) =>
+        a.section_name.localeCompare(b.section_name)
       );
 
-      // c) optioneel: filter empty sections weg
-      setSections(merged.filter((sec) => sec.tasks.length > 0));
-    } catch (error: any) {
+      // 3. Optioneel: filter lege sections weg
+      const filtered = mergedSections.filter((sec) => sec.tasks.length > 0);
+
+      setSections(filtered);
+    } catch (error) {
       console.error("Error loading all tasks:", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.user_metadata?.kitchen_id) return;
+      loadData(user.user_metadata.kitchen_id);
+    }, [user, selectedDate])
+  );
 
   /* Handle the circle press */
   const handleCirclePress = async (task: TaskRow) => {

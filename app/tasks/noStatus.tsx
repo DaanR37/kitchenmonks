@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useContext, useRef } from "react";
+import React, { useState, useEffect, useContext, useRef, useCallback } from "react";
 import { View, StyleSheet, TouchableOpacity, FlatList, Pressable, Platform } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
+import {
+  fetchTaskInstancesWithSection,
+  fetchTaskInstancesWithSectionForScreens,
+  getTasksForSectionOnDate,
+} from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
 import useTaskModal, { TaskRow, SectionData } from "@/hooks/useTaskModal";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
@@ -22,28 +26,6 @@ export default function NoStatusScreen() {
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
-  const flatListRef = useRef<FlatList>(null);
-
-  /* Haal eerst de profielen op zodra de user beschikbaar is */
-  useEffect(() => {
-    async function loadProfiles() {
-      if (!user) return;
-      const kitchenId = user.user_metadata?.kitchen_id;
-      if (!kitchenId) return;
-      try {
-        const profilesData = await fetchProfiles(kitchenId);
-        setAllProfiles(profilesData);
-      } catch (error) {
-        console.error("Error loading profiles for assignment:", error);
-      }
-    }
-    loadProfiles();
-  }, [user]);
-
-  /* Laad de secties en per sectie de taakinstances voor de geselecteerde datum */
-  useEffect(() => {
-    loadData();
-  }, [selectedDate]);
 
   const {
     selectedTask,
@@ -61,46 +43,44 @@ export default function NoStatusScreen() {
     handleDeleteTask,
   } = useTaskModal({ sections, setSections });
 
+  /* ------------------------------------------------------------ */
+
+  /* Haal eerst de profielen op zodra de user beschikbaar is */
   useEffect(() => {
-    if (selectedTask) {
-      scrollToSelectedTask();
+    async function loadProfiles() {
+      if (!user) return;
+      const kitchenId = user.user_metadata?.kitchen_id;
+      if (!kitchenId) return;
+
+      try {
+        const profilesData = await fetchProfiles(kitchenId);
+        setAllProfiles(profilesData);
+      } catch (error) {
+        console.error("Error loading profiles for assignment:", error);
+      }
     }
-  }, [selectedTask]);
+    loadProfiles();
+  }, [user]);
 
-  const scrollToSelectedTask = () => {
-    let index = 0;
-    let found = false;
-    sections.forEach((section) => {
-      section.tasks.forEach((task) => {
-        if (task.id === selectedTask?.id) {
-          found = true;
-        }
-        if (!found) index++;
-      });
-    });
-    flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-  };
+  /* ------------------------------------------------------------ */
 
-  async function loadData() {
+  const loadData = async () => {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
 
     setLoading(true);
     try {
-      // 1️⃣ Haal alle secties op voor de keuken
+      // 1. Haal alle secties op
       const secs = await fetchSections(kitchenId, selectedDate);
 
-      // 2️⃣ Voor elke sectie: haal de taken op voor de geselecteerde datum en filter op 'inactive'
+      // 2. Per sectie: haal taken op via getTasksForSectionOnDate
       const merged: SectionData[] = await Promise.all(
         secs.map(async (sec: any) => {
           const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
+          const filtered = allTasks.filter((t: TaskRow) => t.status === "inactive");
 
-          // Filter alleen taken met status 'inactive'
-          const filteredTasks = allTasks.filter((task: TaskRow) => task.status === "inactive");
-
-          // Voeg section-data toe aan elke taak
-          const tasksWithSection = filteredTasks.map((t: any) => ({
+          const tasksWithSection = filtered.map((t: TaskRow) => ({
             ...t,
             section: {
               id: sec.id,
@@ -120,17 +100,20 @@ export default function NoStatusScreen() {
         })
       );
 
-      // 3️⃣ Filter secties waar minstens één taak overblijft
-      const sectionsWithTasks = merged.filter((sec) => sec.tasks.length > 0);
-
-      // 4️⃣ Zet de state
-      setSections(sectionsWithTasks);
-    } catch (error) {
-      console.error("Error loading no status tasks:", error);
+      // 3. Alleen secties met minstens één taak
+      setSections(merged.filter((sec) => sec.tasks.length > 0));
+    } catch (err) {
+      console.error("Error loading No Status tasks:", err);
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [user, selectedDate])
+  );
 
   /* Handle the circle press */
   const handleCirclePress = async (task: TaskRow) => {

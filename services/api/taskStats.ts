@@ -1,5 +1,12 @@
 import { supabase } from "@/services/supabaseClient";
 
+/*
+  fetchAllDonePercentage:
+  - Doel: Bereken het percentage van alle taakinstances dat 'done' of 'in progress' is.
+  - Parameters:
+      date: De datum waarop de taakinstances gelden.
+      kitchenId: Het ID van de keuken waarvan de taakinstances afkomstig zijn.
+*/
 export async function fetchAllDonePercentage(date: string, kitchenId: string): Promise<number> {
   try {
     const { data, error } = await supabase
@@ -14,7 +21,7 @@ export async function fetchAllDonePercentage(date: string, kitchenId: string): P
       `
       )
       .eq("date", date)
-      .eq("deleted", false)
+      // .eq("deleted", false)
       .in("status", ["done", "in progress", "active"]);
 
     if (error) throw error;
@@ -35,6 +42,14 @@ export async function fetchAllDonePercentage(date: string, kitchenId: string): P
   }
 }
 
+/*
+  fetchMyTasksCount:
+  - Doel: Bereken het aantal taakinstances dat aan een bepaald profiel is toegewezen.
+  - Parameters:
+      profileId: Het ID van het profiel waarvan de taakinstances afkomstig zijn.
+      date: De datum waarop de taakinstances gelden.
+      kitchenId: Het ID van de keuken waarvan de taakinstances afkomstig zijn.
+*/
 export async function fetchMyTasksCount(profileId: string, date: string, kitchenId: string): Promise<number> {
   try {
     const { data, error } = await supabase
@@ -51,7 +66,7 @@ export async function fetchMyTasksCount(profileId: string, date: string, kitchen
       `
       )
       .eq("date", date)
-      .eq("deleted", false)
+      // .eq("deleted", false)
       .contains("assigned_to", [profileId])
       .in("status", ["active", "in progress"]);
 
@@ -66,6 +81,13 @@ export async function fetchMyTasksCount(profileId: string, date: string, kitchen
   }
 }
 
+/*
+  fetchActiveTasksCount:
+  - Doel: Bereken het aantal taakinstances dat 'active' of 'in progress' is.
+  - Parameters:
+      date: De datum waarop de taakinstances gelden.
+      kitchenId: Het ID van de keuken waarvan de taakinstances afkomstig zijn.
+*/
 export async function fetchActiveTasksCount(date: string, kitchenId: string): Promise<number> {
   try {
     const { data, error } = await supabase
@@ -81,7 +103,7 @@ export async function fetchActiveTasksCount(date: string, kitchenId: string): Pr
       `
       )
       .eq("date", date)
-      .eq("deleted", false)
+      // .eq("deleted", false)
       .in("status", ["active", "in progress"]);
 
     if (error) throw error;
@@ -95,20 +117,29 @@ export async function fetchActiveTasksCount(date: string, kitchenId: string): Pr
   }
 }
 
+/*
+  fetchOutOfStockTasksCount:
+  - Doel: Bereken het aantal taakinstances dat 'out of stock' is.
+  - Parameters:
+      date: De datum waarop de taakinstances gelden.
+      kitchenId: Het ID van de keuken waarvan de taakinstances afkomstig zijn.
+*/
 export async function fetchOutOfStockTasksCount(date: string, kitchenId: string): Promise<number> {
   try {
     const { data, error } = await supabase
       .from("task_instances")
-      .select(`
+      .select(
+        `
         id,
         status,
         deleted,
         task_template:task_template_id!inner(
           section_id
         )
-      `)
+      `
+      )
       .eq("date", date)
-      .eq("deleted", false)
+      // .eq("deleted", false)
       .eq("status", "out of stock");
 
     if (error) throw error;
@@ -122,20 +153,29 @@ export async function fetchOutOfStockTasksCount(date: string, kitchenId: string)
   }
 }
 
+/*
+  fetchNoStatusTasksCount:
+  - Doel: Bereken het aantal taakinstances dat 'inactive' is.
+  - Parameters:
+      date: De datum waarop de taakinstances gelden.
+      kitchenId: Het ID van de keuken waarvan de taakinstances afkomstig zijn.
+*/
 export async function fetchNoStatusTasksCount(date: string, kitchenId: string): Promise<number> {
   try {
     const { data, error } = await supabase
       .from("task_instances")
-      .select(`
+      .select(
+        `
         id,
         status,
         deleted,
         task_template:task_template_id!inner(
           section_id
         )
-      `)
+      `
+      )
       .eq("date", date)
-      .eq("deleted", false)
+      // .eq("deleted", false)
       .eq("status", "inactive");
 
     if (error) throw error;
@@ -149,6 +189,13 @@ export async function fetchNoStatusTasksCount(date: string, kitchenId: string): 
   }
 }
 
+/*
+  fetchActiveCountPerSection:
+  - Doel: Bereken het aantal taakinstances per sectie dat 'active' of 'in progress' is.
+  - Parameters:
+      kitchenId: Het ID van de keuken waarvan de taakinstances afkomstig zijn.
+      date: De datum waarop de taakinstances gelden.
+*/
 export async function fetchActiveCountPerSection(
   kitchenId: string,
   date: string
@@ -167,7 +214,7 @@ export async function fetchActiveCountPerSection(
       `
       )
       .eq("date", date)
-      .eq("deleted", false)
+      // .eq("deleted", false)
       .in("status", ["active", "in progress"]);
 
     if (error) throw error;
@@ -189,7 +236,13 @@ export async function fetchActiveCountPerSection(
   }
 }
 
-async function getSectionIdsForKitchen(kitchenId: string): Promise<string[]> {
+/*
+  getSectionIdsForKitchen:
+  - Doel: Haal alle sectie-IDs op van een keuken.
+  - Parameters:
+      kitchenId: Het ID van de keuken waarvan de sectie-IDs afkomstig zijn.
+*/
+export async function getSectionIdsForKitchen(kitchenId: string): Promise<string[]> {
   const { data, error } = await supabase.from("sections").select("id").eq("kitchen_id", kitchenId);
 
   if (error) {

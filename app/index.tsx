@@ -34,9 +34,9 @@ import AllTasksTabletView from "@/components/AllTasksTabletView";
 import TeamMepTabletView from "@/components/TeamMepTabletView";
 import MyMepTabletView from "@/components/MyMepTabletView";
 import OutOfStockTabletView from "@/components/OutOfStockTabletView";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import NoStatusTabletView from "@/components/NoStatusTabletView";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { fetchTaskInstancesWithSection } from "@/services/api/taskHelpers";
 
 /* Types */
 type Task = {
@@ -92,6 +92,21 @@ export default function HomeScreen() {
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
+  /* Tijdelijk script om oude keukens terug te vullen */
+  // useEffect(() => {
+  //   const runBackfill = async () => {
+  //     if (!user) return;
+  //     const kitchenId = user.user_metadata?.kitchen_id;
+  //     if (!kitchenId) return;
+
+  //     console.log("🚀 Backfill gestart voor kitchen:", kitchenId);
+  //     await backfillTaskInstances(kitchenId);
+  //     console.log("✅ Backfill voltooid");
+  //   };
+
+  //   runBackfill();
+  // }, []);
+
   /* Check of de user ingelogd is - anders redirect naar auth/login */
   useEffect(() => {
     if (!loading && !user) {
@@ -105,33 +120,46 @@ export default function HomeScreen() {
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
 
+    // const taskChannel = supabase
+    //   .channel("taskInstancesChannel")
+    //   .on(
+    //     "postgres_changes",
+    //     { event: "*", schema: "public", table: "task_instances" },
+    //     async (payload: any) => {
+    //       const templateId = payload.new?.task_template_id;
+    //       if (!templateId || payload.new?.deleted) return;
+
+    //       const { data } = (await supabase
+    //         .from("task_templates")
+    //         .select("section:section_id(id, kitchen_id)")
+    //         .eq("id", templateId)
+    //         .maybeSingle()) as { data: { section: { id: string; kitchen_id: string } } | null };
+
+    //       if (data?.section?.kitchen_id === kitchenId) {
+    //         console.log("🔁 Task update → refresh stats");
+    //         loadStats();
+    //         // loadSections();
+    //       }
+    //     }
+    //   )
+    //   .subscribe();
+
     const taskChannel = supabase
       .channel("taskInstancesChannel")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "task_instances" },
-        async (payload: any) => {
-          const templateId = payload.new?.task_template_id;
-          if (!templateId || payload.new?.deleted) return;
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_instances" }, (payload: any) => {
+        console.log("▶ Realtime task_instances payload ontvangen:", payload);
 
-          const { data } = (await supabase
-            .from("task_templates")
-            .select("section:section_id(id, kitchen_id)")
-            .eq("id", templateId)
-            .maybeSingle()) as { data: { section: { id: string; kitchen_id: string } } | null };
-
-          if (data?.section?.kitchen_id === kitchenId) {
-            console.log("🔁 Task update → refresh stats");
-            loadStats();
-            // loadSections();
-          }
+        /* Voorkom loop: alleen update als payload bij geselecteerde datum hoort */
+        if (payload?.new?.date === selectedDate) {
+          console.log("▶ Herladen door task_instances wijziging");
+          loadStats();
         }
-      )
+      })
       .subscribe();
 
     const sectionChannel = supabase
       .channel("sectionsChannel")
-      .on("postgres_changes", { event: "*", schema: "public", table: "sections" }, async (payload: any) => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "sections" }, (payload: any) => {
         const payloadKitchenId = payload.new?.kitchen_id ?? payload.old?.kitchen_id;
         if (payloadKitchenId === kitchenId) {
           console.log("🔁 Section update → refresh sections");
@@ -189,43 +217,27 @@ export default function HomeScreen() {
     if (!kitchenId) return;
 
     try {
-      /* 1. Haal alle sections op */
-      const secs = await fetchSections(kitchenId, selectedDate);
+      // 🔢 Haal alle task_instances van deze keuken op voor deze datum
+      const allInstances = await fetchTaskInstancesWithSection(selectedDate, kitchenId);
+      console.log("▶ fetched stats", allInstances);
+      console.log("▶ fetched stats", allInstances.length);
 
-      /* 2. Haal taken per sectie op (alleen voor stats purposes) */
-      const mergedSections: SectionData[] = await Promise.all(
-        secs.map(async (section: any) => {
-          const tasks = await getTasksForSectionOnDate(section.id, selectedDate);
-          // console.log("▶ fetched stats");
-          return {
-            id: section.id,
-            section_name: section.section_name ?? section.name,
-            start_date: section.start_date,
-            end_date: section.end_date,
-            task_templates: tasks,
-          };
-        })
+      // ✅ Boolean flags (per screen logica)
+      setHasAllData(allInstances.length > 0);
+      setHasMyMepData(
+        allInstances.some(
+          (t: any) =>
+            Array.isArray(t.assigned_to) &&
+            t.assigned_to.includes(activeProfile?.id ?? "") &&
+            ["active", "in progress", "done"].includes(t.status)
+        )
       );
 
-      /* 3. Haal alle taken op */
-      const allTasks = mergedSections.flatMap((sec) => sec.task_templates);
+      setHasTeamMepData(allInstances.some((t: any) => t.status !== "inactive"));
+      setHasOutOfStockData(allInstances.some((t: any) => t.status === "out of stock"));
+      setHasNoStatusData(allInstances.some((t: any) => t.status === "inactive"));
 
-      /* 4. Bepaal booleans op basis van alle taken */
-      const hasAll = allTasks.length > 0;
-      const hasMyMep = allTasks.some(
-        (task) => activeProfile?.id && task.assigned_to?.includes(activeProfile.id)
-      );
-      const hasTeamMep = allTasks.length > 0;
-      const hasOutOfStock = allTasks.some((task) => task.status === "out of stock");
-      const hasNoStatus = allTasks.some((task) => task.status === "inactive");
-
-      setHasAllData(hasAll);
-      setHasMyMepData(hasMyMep);
-      setHasTeamMepData(hasTeamMep);
-      setHasOutOfStockData(hasOutOfStock);
-      setHasNoStatusData(hasNoStatus);
-
-      /* 5. Set counts/percentages via Supabase helpers */
+      // ✅ Supabase helpers voor counts (die al goed filteren op status)
       const allPct = await fetchAllDonePercentage(selectedDate, kitchenId);
       setAllPercentage(allPct);
 
@@ -243,7 +255,7 @@ export default function HomeScreen() {
         setMyMepCount(myMepCount);
       }
 
-      const noStatusCount = allTasks.filter((task) => task.status === "inactive").length;
+      const noStatusCount = allInstances.filter((t: any) => t.status === "inactive").length;
       setNoStatusCount(noStatusCount);
     } catch (error) {
       console.error("Error loading stats:", error);

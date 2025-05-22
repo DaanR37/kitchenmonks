@@ -50,10 +50,7 @@ export async function updateTaskInstanceStatus(taskInstanceId: string, newStatus
       taskInstanceId: Het ID van de taakinstance die je wilt verwijderen.
 */
 export async function deleteTaskInstance(taskInstanceId: string) {
-  const { error } = await supabase
-    .from("task_instances")
-    .delete()
-    .eq("id", taskInstanceId);
+  const { error } = await supabase.from("task_instances").delete().eq("id", taskInstanceId);
 
   if (error) throw error;
 }
