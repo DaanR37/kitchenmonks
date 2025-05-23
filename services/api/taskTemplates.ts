@@ -1,39 +1,6 @@
 import { supabase } from "@/services/supabaseClient";
-import { eachDayOfInterval, format } from "date-fns";
 import { createTaskInstance } from "./taskInstances";
-
-/*
-  createTaskTemplate:
-  - Doel: Insert een nieuwe taaktemplate in de task_templates-tabel.
-  - Parameters:
-      sectionId: Het ID van de sectie waaraan deze template gekoppeld is.
-      taskName: De naam van de taak (bijv. "Toast snijden").
-      startDate: De datum vanaf wanneer deze template geldig is.
-      endDate: De datum tot wanneer deze template geldig is.
-  - Belangrijk: Zorg ervoor dat de kolomnaam voor de einddatum exact overeenkomt met de database (dus "end_date").
-*/
-// export async function createTaskTemplate(
-//   sectionId: string,
-//   taskName: string,
-//   startDate: string,
-//   endDate: string
-// ) {
-//   const { data, error } = await supabase
-//     .from("task_templates")
-//     .insert([
-//       { 
-//         section_id: sectionId, 
-//         task_name: taskName, 
-//         start_date: startDate, 
-//         end_date: endDate 
-//       }
-//     ])
-//     .select() /* Retourneer de ingevoegde rij */
-//     .maybeSingle(); /* Verwacht één enkele rij */
-
-//   if (error) throw error;
-//   return data;
-// }
+import { eachDayOfInterval, format } from "date-fns";
 
 export async function createTaskTemplate(
   sectionId: string,
@@ -41,28 +8,29 @@ export async function createTaskTemplate(
   startDate: string,
   endDate: string
 ) {
+  /* 1. Voeg de taaktemplate toe */
   const { data: template, error } = await supabase
     .from("task_templates")
     .insert([
-      { 
-        section_id: sectionId, 
-        task_name: taskName, 
-        start_date: startDate, 
-        end_date: endDate 
-      }
+      {
+        section_id: sectionId,
+        task_name: taskName,
+        start_date: startDate,
+        end_date: endDate,
+      },
     ])
     .select()
     .maybeSingle();
 
   if (error) throw error;
 
-  // 🔁 Backfill alle dagen in range
-  const allDates = eachDayOfInterval({
+  /* 2. Maak per dag in de looptijd een task_instance aan (als deze nog niet bestaat) */
+  const days = eachDayOfInterval({
     start: new Date(startDate),
     end: new Date(endDate),
   });
 
-  for (const day of allDates) {
+  for (const day of days) {
     const date = format(day, "yyyy-MM-dd");
 
     const { count } = await supabase
@@ -76,6 +44,7 @@ export async function createTaskTemplate(
     }
   }
 
+  /* 3. Retourneer de template (voor UI update) */
   return template;
 }
 
@@ -104,10 +73,7 @@ export async function updateTaskTemplateName(taskTemplateId: string, newName: st
       start_date <= selectedDate <= end_date.
   - Retourneert: Een array met taaktemplates die aan deze criteria voldoen.
 */
-export async function fetchTaskTemplatesBySection(
-  sectionId: string, 
-  selectedDate: string
-) {
+export async function fetchTaskTemplatesBySection(sectionId: string, selectedDate: string) {
   const { data, error } = await supabase
     .from("task_templates")
     .select("*") /* Haal alle kolommen op */

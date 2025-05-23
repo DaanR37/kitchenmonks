@@ -58,18 +58,43 @@ export async function updateSection(sectionId: string, newName: string, newEndDa
 
 /* Verwijder sectie, maar check eerst of er nog taken aan hangen */
 export async function deleteSectionWithCheck(sectionId: string): Promise<"deleted" | "has_tasks"> {
-  const { count, error: countError } = await supabase
-    .from("task_templates")
-    .select("id", { head: true, count: "exact" })
-    .eq("section_id", sectionId);
-  if (countError) throw countError;
+  try {
+    /* 1. Haal alle template-IDs op die bij deze section horen */
+    const { data: templates, error: templateError } = await supabase
+      .from("task_templates")
+      .select("id")
+      .eq("section_id", sectionId);
 
-  if (count && count > 0) {
-    return "has_tasks";
+    if (templateError) throw templateError;
+
+    const templateIds = templates?.map((t) => t.id) || [];
+    if (templateIds.length === 0) {
+      /* Geen templates → safe to delete */
+      await supabase.from("sections").delete().eq("id", sectionId);
+      return "deleted";
+    }
+
+    /* 2. Check of er nog task_instances bestaan die naar deze templates verwijzen */
+    const { count, error: instanceError } = await supabase
+      .from("task_instances")
+      .select("id", { head: true, count: "exact" })
+      .in("task_template_id", templateIds);
+
+    if (instanceError) throw instanceError;
+
+    if (count && count > 0) {
+      return "has_tasks";
+    }
+
+    /* 3. Verwijder eerst de templates (foreign key) */
+    await supabase.from("task_templates").delete().in("id", templateIds);
+
+    /* 4. Verwijder daarna de section zelf */
+    await supabase.from("sections").delete().eq("id", sectionId);
+
+    return "deleted";
+  } catch (err) {
+    console.error("❌ Fout bij section-verwijdering:", err);
+    throw err;
   }
-
-  const { error: deleteError } = await supabase.from("sections").delete().eq("id", sectionId);
-  if (deleteError) throw deleteError;
-
-  return "deleted";
 }

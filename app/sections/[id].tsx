@@ -16,7 +16,6 @@ import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
 import CalendarModal from "@/components/CalendarModal";
 import { updateSection, deleteSectionWithCheck, fetchSections } from "@/services/api/sections";
-import { getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { createTaskTemplate } from "@/services/api/taskTemplates";
 import { fetchProfiles } from "@/services/api/profiles";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
@@ -28,7 +27,7 @@ import TaskDetailsModal from "@/components/TaskDetailsModal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { formatDateString } from "@/components/DateSelector";
 import { supabase } from "@/services/supabaseClient";
-import { fetchTaskInstancesWithSectionForScreens } from "@/services/api/taskHelpers";
+import { getTasksForSectionOnDate, backfillTaskInstancesForDate } from "@/services/api/taskHelpers";
 
 export default function SingleSectionScreen() {
   const router = useRouter();
@@ -85,59 +84,67 @@ export default function SingleSectionScreen() {
 
   /* ------------------------------------------------------------ */
 
-  const loadSectionMeta = async (sectionId: string) => {
-    const kitchenId = user?.user_metadata?.kitchen_id;
-    if (!kitchenId) return null;
-    const allSections = await fetchSections(kitchenId, selectedDate);
-    return allSections.find((sec: any) => sec.id === sectionId) || null;
-  };
-
-  const loadSectionTasks = async (sectionId: string, sectionMeta: any) => {
-    const kitchenId = user?.user_metadata?.kitchen_id;
-    if (!kitchenId) return [];
-
-    const allInstances = await fetchTaskInstancesWithSectionForScreens(kitchenId, selectedDate);
-
-    return allInstances
-      .filter((t) => t.task_template?.section_id === sectionId)
-      .map((task: any) => ({
-        ...task,
-        section: {
-          id: sectionMeta.id,
-          section_name: sectionMeta.section_name,
-          start_date: sectionMeta.start_date,
-          end_date: sectionMeta.end_date,
-        },
-      }));
-  };
-
+  /* Snel laden van data - zonder backfill */
   const loadData = useCallback(
     async (sectionId: string) => {
       if (!user) return;
+      const kitchenId = user.user_metadata?.kitchen_id;
+      if (!kitchenId) return;
+
       setLoading(true);
       try {
-        const sectionMeta = await loadSectionMeta(sectionId);
-        if (!sectionMeta) return;
+        /* 1: haal section metadata op */
+        const allSections = await fetchSections(kitchenId, selectedDate);
+        const selectedSection = allSections.find((sec) => sec.id === sectionId);
+        if (!selectedSection) return;
 
-        const tasks = await loadSectionTasks(sectionId, sectionMeta);
-
-        setSections([
-          {
-            id: sectionMeta.id,
-            section_name: sectionMeta.section_name,
-            start_date: sectionMeta.start_date,
-            end_date: sectionMeta.end_date,
-            tasks,
+        /* 2: haal taken op voor deze section en datum */
+        const allTasks = await getTasksForSectionOnDate(sectionId, selectedDate);
+        const tasksWithSection = allTasks.map((t: TaskRow) => ({
+          ...t,
+          section: {
+            id: selectedSection.id,
+            section_name: selectedSection.section_name,
+            start_date: selectedSection.start_date,
+            end_date: selectedSection.end_date,
           },
-        ]);
-      } catch (error) {
-        console.error("Fout bij laden van sectie:", error);
+        }));
+
+        /* 3: set state */
+        const finalSection: SectionData = {
+          id: selectedSection.id,
+          section_name: selectedSection.section_name,
+          start_date: selectedSection.start_date,
+          end_date: selectedSection.end_date,
+          tasks: tasksWithSection,
+        };
+        setSections([finalSection]);
+      } catch (err) {
+        console.error("Fout bij laden van sectie:", err);
       } finally {
         setLoading(false);
       }
     },
     [user, selectedDate]
   );
+
+  /* Asynchrone backfill — vertraagt de UI niet */
+  // useEffect(() => {
+  //   const runBackfill = async () => {
+  //     if (!user || typeof id !== "string") return;
+  //     const kitchenId = user.user_metadata?.kitchen_id;
+  //     if (!kitchenId) return;
+
+  //     try {
+  //       await backfillTaskInstancesForDate(kitchenId, selectedDate);
+  //       console.log("Backfill succesvol uitgevoerd");
+  //     } catch (err) {
+  //       console.error("Fout bij backfill:", err);
+  //     }
+  //   };
+
+  //   runBackfill();
+  // }, [user, selectedDate]);
 
   useFocusEffect(
     useCallback(() => {
@@ -147,112 +154,70 @@ export default function SingleSectionScreen() {
     }, [id, loadData])
   );
 
-  // const handleCreateTask = async () => {
-  //   if (!user) return;
-  //   const kitchenId = user.user_metadata?.kitchen_id;
-  //   if (!kitchenId || !addTaskSectionId || !newTaskName.trim()) return;
+  const handleCreateTask = async () => {
+    if (!user || !addTaskSectionId || !newTaskName.trim()) return;
 
-  //   const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
-  //   if (!sectionObj) return;
-
-  //   try {
-  //     const newTemplate = await createTaskTemplate(
-  //       addTaskSectionId,
-  //       newTaskName + " " + new Date().getTime(),
-  //       sectionObj.start_date,
-  //       sectionObj.end_date
-  //     );
-
-  //     const newTask = {
-  //       task_template_id: newTemplate.id,
-  //       date: selectedDate,
-  //       task_name: newTaskName,
-  //       assigned_to: [],
-  //       section: {
-  //         id: sectionObj.id,
-  //         section_name: sectionObj.section_name,
-  //       },
-  //     };
-
-  //     const updatedSections = sections.map((sec) =>
-  //       sec.id === addTaskSectionId ? { ...sec, tasks: [...sec.tasks, newTask] } : sec
-  //     );
-
-  //     setSections(updatedSections as SectionData[]);
-  //   } catch (error) {
-  //     console.error("Error creating task:", error);
-  //   } finally {
-  //     setAddTaskModalVisible(false);
-  //     setNewTaskName("");
-  //   }
-  // };
-
-  async function handleCreateTask() {
-    if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
 
-    /* Controleer of er een sectie is geselecteerd en dat er een taaknaam is ingevoerd */
-    if (!addTaskSectionId || !newTaskName.trim()) return;
-    try {
-      /* Zoek de oudersectie op in de lokale state, zodat we de start- en einddatum ervan hebben */
-      const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
-      if (!sectionObj) {
-        console.log("Geen section data gevonden voor addTaskSectionId:", addTaskSectionId);
-        return;
-      }
+    const sectionObj = sections.find((sec) => sec.id === addTaskSectionId);
+    if (!sectionObj) return;
 
-      /* Maak altijd een nieuwe task template aan. We voegen een timestamp toe voor uniciteit,
-      maar nu gebruiken we de sta  rt_date en end_date van de sectie als de geldigheidsperiode */
+    try {
+      // 1. Template + instance alleen voor geselecteerde datum
       const newTemplate = await createTaskTemplate(
         addTaskSectionId,
         newTaskName + " " + new Date().getTime(),
-        sectionObj.start_date, // Gebruik de parent start datum
-        sectionObj.end_date // Gebruik de parent eind datum
+        sectionObj.start_date,
+        sectionObj.end_date,
       );
 
-      // Zoek de juiste task_instance voor de geselecteerde datum
-      const { data: taskInstance, error } = await supabase
+      // 2. Haal bijbehorende task_instance op (de net aangemaakte)
+      const { data: taskInstance } = await supabase
         .from("task_instances")
         .select("*")
         .eq("task_template_id", newTemplate.id)
         .eq("date", selectedDate)
         .maybeSingle();
 
-      if (error || !taskInstance) throw new Error("Task instance niet gevonden");
+      if (!taskInstance) throw new Error("Task instance niet gevonden na aanmaak");
 
-      const newTask = {
+      const newTask: TaskRow = {
         ...taskInstance,
         task_name: newTaskName,
         assigned_to: [],
         section: {
           id: sectionObj.id,
           section_name: sectionObj.section_name,
+          start_date: sectionObj.start_date,
+          end_date: sectionObj.end_date,
         },
       };
 
-      /* Update de lokale state door de nieuwe taak toe te voegen aan de taken van de juiste sectie */
-      const updatedSections = sections.map((sec) => {
-        if (sec.id === addTaskSectionId) {
-          return { ...sec, tasks: [...sec.tasks, newTask] };
-        }
-        return sec;
-      });
-      setSections(updatedSections);
+      const updatedSections = sections.map((sec) =>
+        sec.id === addTaskSectionId ? { ...sec, tasks: [...sec.tasks, newTask] } : sec
+      );
+      setSections(updatedSections as SectionData[]);
     } catch (error) {
-      console.log("Error creating task:", error);
+      console.error("Fout bij aanmaken taak:", error);
     } finally {
       closeAddTaskModal();
     }
-  }
+  };
 
+  /* ------------------------------------------------------------ */
 
-
-
-
-
-
-
+  /* Handlers voor de "Nieuwe taak" modal */
+  const openAddTaskModal = (sectionId: string) => {
+    setAddTaskSectionId(sectionId);
+    setNewTaskName("");
+    setAddTaskModalVisible(true);
+  };
+  const closeAddTaskModal = () => {
+    setAddTaskSectionId(null);
+    setNewTaskName("");
+    setAddTaskModalVisible(false);
+  };
 
   /* Handler om changes in de modal op te slaan */
   const handleSaveEditSection = async () => {
@@ -273,7 +238,6 @@ export default function SingleSectionScreen() {
       alert("Er ging iets mis bij het opslaan.");
     }
   };
-
   /* Handler om de sectie te verwijderen */
   const handleDeleteSection = async () => {
     if (!editSectionId) return;
@@ -296,7 +260,6 @@ export default function SingleSectionScreen() {
       alert("Verwijderen is mislukt.");
     }
   };
-
   /* Handle the circle press */
   const handleCirclePress = async (task: TaskRow) => {
     await handleSetDone();
@@ -305,18 +268,6 @@ export default function SingleSectionScreen() {
 
   /* ------------------------------------------------------------ */
 
-  /* Handlers voor de "Nieuwe taak" modal */
-  const openAddTaskModal = (sectionId: string) => {
-    setAddTaskSectionId(sectionId);
-    setNewTaskName("");
-    setAddTaskModalVisible(true);
-  }
-  const closeAddTaskModal = () => {
-    setAddTaskSectionId(null);
-    setNewTaskName("");
-    setAddTaskModalVisible(false);
-  }
-
   /* Handle the "Edit/Delete" section modal */
   const handleShowEditModal = (section: SectionData) => {
     setEditSectionId(section.id);
@@ -324,7 +275,6 @@ export default function SingleSectionScreen() {
     setEditSectionEndDate(section.end_date);
     setShowEditModal(true);
   };
-
   /* Add Task & Edit Section Modals */
   const renderAddTaskModal = () => {
     return (

@@ -15,7 +15,6 @@ export async function createTaskInstance(taskTemplateId: string, date: string) {
       {
         task_template_id: taskTemplateId /* Koppeling met de taaktemplate */,
         date: date /* De specifieke datum voor deze instance */,
-        // deleted: false,
       },
     ])
     .select() /* Retourneer de ingevoegde rij (nieuwe taakinstance) */
@@ -124,4 +123,29 @@ export async function updateTaskInstanceSkip(taskInstanceId: string) {
 
   if (error) throw error;
   return data;
+}
+
+export async function fetchInactiveTaskInstancesWithSection(date: string, kitchenId: string) {
+  const { data, error } = await supabase
+    .from("task_instances")
+    .select(
+      `
+        id,
+        date,
+        status,
+        assigned_to,
+        task_template:task_template_id!inner(
+          task_name,
+          section:section_id(id, section_name, start_date, end_date, kitchen_id)
+        )
+      `
+    )
+    .eq("date", date)
+    .in("status", ["inactive"]);
+
+  if (error) throw error;
+
+  return data.filter(
+    (t: any) => t.task_template?.section?.id && t.task_template.section.kitchen_id === kitchenId
+  );
 }

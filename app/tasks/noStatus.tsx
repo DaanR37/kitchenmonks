@@ -1,15 +1,11 @@
-import React, { useState, useEffect, useContext, useRef, useCallback } from "react";
+import React, { useState, useEffect, useContext, useCallback } from "react";
 import { View, StyleSheet, TouchableOpacity, FlatList, Pressable, Platform } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { AuthContext } from "@/services/AuthContext";
 import { DateContext } from "@/services/DateContext";
 import { ProfileData } from "@/services/ProfileContext";
 import { fetchSections } from "@/services/api/sections";
-import {
-  fetchTaskInstancesWithSection,
-  fetchTaskInstancesWithSectionForScreens,
-  getTasksForSectionOnDate,
-} from "@/services/api/taskHelpers";
+import { fetchTaskInstancesWithSection, getTasksForSectionOnDate } from "@/services/api/taskHelpers";
 import { fetchProfiles } from "@/services/api/profiles";
 import useTaskModal, { TaskRow, SectionData } from "@/hooks/useTaskModal";
 import { cleanTaskName, generateInitials, getColorFromId } from "@/utils/taskUtils";
@@ -18,6 +14,7 @@ import { STATUS_META, StatusMeta } from "@/constants/statusMeta";
 import AppText from "@/components/AppText";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { fetchInactiveTaskInstancesWithSection } from "@/services/api/taskInstances";
 
 export default function NoStatusScreen() {
   const router = useRouter();
@@ -64,7 +61,62 @@ export default function NoStatusScreen() {
 
   /* ------------------------------------------------------------ */
 
-  const loadData = async () => {
+  // const loadData = useCallback(async () => {
+  //   if (!user) return;
+  //   const kitchenId = user.user_metadata?.kitchen_id;
+  //   if (!kitchenId) return;
+
+  //   setLoading(true);
+  //   try {
+  //     // 1) Haal alle secties van deze keuken
+  //     const secs = await fetchSections(kitchenId, selectedDate);
+
+  //     // 2) Haal alle taken op voor deze datum + keuken
+  //     const allInstances = await fetchTaskInstancesWithSection(selectedDate, kitchenId);
+
+  //     // 3) Filter taken met status 'inactive'
+  //     const inactiveTasks = allInstances
+  //       .filter((t: any) => t.status === "inactive")
+  //       .map((t: any) => ({
+  //         ...t,
+  //         task_name: t.task_template?.task_name ?? "Onbekend",
+  //         section: t.task_template?.section ?? {},
+  //         section_id: t.task_template?.section?.id ?? null,
+  //       }));
+
+  //     // 4) Groepeer per sectie
+  //     const grouped: SectionData[] = secs.map((sec: any) => {
+  //       const tasks = inactiveTasks
+  //         .filter((t: any) => t.section_id === sec.id)
+  //         .map((t: any) => ({
+  //           ...t,
+  //           section: {
+  //             id: sec.id,
+  //             section_name: sec.section_name,
+  //             start_date: sec.start_date,
+  //             end_date: sec.end_date,
+  //           },
+  //         }));
+
+  //       return {
+  //         id: sec.id,
+  //         section_name: sec.section_name,
+  //         start_date: sec.start_date,
+  //         end_date: sec.end_date,
+  //         tasks,
+  //       };
+  //     });
+
+  //     // 5) Alleen secties met taken tonen
+  //     setSections(grouped.filter((s) => s.tasks.length > 0));
+  //   } catch (err) {
+  //     console.error("Error loading No Status tasks:", err);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // }, [user, selectedDate]);
+
+  const loadData = useCallback(async () => {
     if (!user) return;
     const kitchenId = user.user_metadata?.kitchen_id;
     if (!kitchenId) return;
@@ -74,14 +126,16 @@ export default function NoStatusScreen() {
       // 1. Haal alle secties op
       const secs = await fetchSections(kitchenId, selectedDate);
 
-      // 2. Per sectie: haal taken op via getTasksForSectionOnDate
-      const merged: SectionData[] = await Promise.all(
-        secs.map(async (sec: any) => {
-          const allTasks = await getTasksForSectionOnDate(sec.id, selectedDate);
-          const filtered = allTasks.filter((t: TaskRow) => t.status === "inactive");
+      // 2. Haal alle 'inactive' taken met section-meta in 1 call
+      const inactiveTasks = await fetchInactiveTaskInstancesWithSection(selectedDate, kitchenId);
 
-          const tasksWithSection = filtered.map((t: TaskRow) => ({
+      // 3. Groepeer per section
+      const grouped: SectionData[] = secs.map((sec: any) => {
+        const tasks = inactiveTasks
+          .filter((t: any) => t.task_template?.section?.id === sec.id)
+          .map((t: any) => ({
             ...t,
+            task_name: t.task_template.task_name,
             section: {
               id: sec.id,
               section_name: sec.section_name,
@@ -90,24 +144,23 @@ export default function NoStatusScreen() {
             },
           }));
 
-          return {
-            id: sec.id,
-            section_name: sec.section_name,
-            start_date: sec.start_date,
-            end_date: sec.end_date,
-            tasks: tasksWithSection,
-          };
-        })
-      );
+        return {
+          id: sec.id,
+          section_name: sec.section_name,
+          start_date: sec.start_date,
+          end_date: sec.end_date,
+          tasks,
+        };
+      });
 
-      // 3. Alleen secties met minstens één taak
-      setSections(merged.filter((sec) => sec.tasks.length > 0));
+      // 4. Alleen secties met taken tonen
+      setSections(grouped.filter((s) => s.tasks.length > 0));
     } catch (err) {
       console.error("Error loading No Status tasks:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, selectedDate]);
 
   useFocusEffect(
     useCallback(() => {

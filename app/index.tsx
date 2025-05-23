@@ -36,7 +36,7 @@ import MyMepTabletView from "@/components/MyMepTabletView";
 import OutOfStockTabletView from "@/components/OutOfStockTabletView";
 import NoStatusTabletView from "@/components/NoStatusTabletView";
 import LoadingSpinner from "@/components/LoadingSpinner";
-import { fetchTaskInstancesWithSection } from "@/services/api/taskHelpers";
+import { backfillTaskInstances, fetchTaskInstancesWithSection } from "@/services/api/taskHelpers";
 
 /* Types */
 type Task = {
